@@ -1,7 +1,20 @@
-__pycache__
+
+# deirectories
+.vscode/
 env
 run_dir
+__pycache__/
+.pytest_cache/
+
+# files
+*.swp
+*.pyc
+__phy_copy*
+_scratchpad.py
+*.o
+*.so
 jobdata-*
 input.tgz
 uapp-key
 uapp-key.pub
+docker-compose.override.yml
