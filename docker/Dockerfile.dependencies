@@ -74,7 +74,7 @@ RUN make -j install
 # Tiramisu
 WORKDIR /home/stellar/git/tiramisu/build
 RUN cmake -DUSE_HALIDE=OFF -DCMAKE_C_COMPILER=clang-8 -DCMAKE_CXX_COMPILER=clang++-8 ..
-RUN make -j  tiramisu
+RUN make -j tiramisu
 
 # pytiramisu
 WORKDIR /home/stellar/git
@@ -94,7 +94,7 @@ RUN git clone -n https://github.com/ActiveHarmony/harmony.git
 WORKDIR /home/stellar/git/harmony
 RUN git checkout 1c7536abc3035e864adeb076e147dd2d22b56e81
 RUN make CFLAGS=-fPIC LDFLAGS=-fPIC 
-RUN make install
+RUN make -j install
 
 # otf2
 WORKDIR /home/stellar/git
@@ -172,7 +172,7 @@ RUN cmake -DCMAKE_BUILD_TYPE=Debug \
   -DPHYLANX_WITH_CXX17=on \
   -DPHYLANX_WITH_TOOLS=on \
   .. && \
-  make install
+  make -j 4 install
 
 # traveler
 WORKDIR /home/stellar/git/
@@ -195,7 +195,7 @@ RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:/home/stellar/git/phyflow/bac
 # paths
 RUN echo "export PATH=\$PATH:/home/stellar/git/harmony/bin" >> ~/.bashrc
 RUN echo "export PYTHONPATH=/home/stellar/git/phyflow/backend" >> /home/stellar/.bashrc
-RUN echo "export PYTHONPATH=\$PYTHONPATH:/home/stellar/git/phyfleaux/" >> /home/stellar/.bashrc
+RUN echo "export PYTHONPATH=\$PYTHONPATH:/home/stellar/git/phyfleaux/:/root/.local/lib/python3.8/site-packages" >> /home/stellar/.bashrc
 
 
 
