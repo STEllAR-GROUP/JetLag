@@ -16,7 +16,7 @@ from typing import Any, List, Union
 from pytiramisu import buffer, computation, constant, expr, function
 from pytiramisu import init_physl, input, var
 from pytiramisu import uint32_expr
-from phyfleaux.core.task import Task
+from phyfleaux.physl.core.task import Task
 
 
 class Load:
