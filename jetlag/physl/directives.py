@@ -11,8 +11,8 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 from typing import Union, Any
 from types import FunctionType
 
-from phyfleaux.physl.core import Task
-from phyfleaux.physl.optimization.polyhedral import Polytope
+from jetlag.physl.core import Task
+from jetlag.physl.analysis.polyhedral import Polytope
 
 
 def task(__task_arg=None, **kwargs):

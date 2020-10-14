@@ -10,8 +10,8 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 import numpy
 import time
 
-from phyfleaux.physl.directives import polyhedral
-from phyfleaux.physl.plugins import numpy as numphy
+from jetlag.physl.directives import polyhedral
+from jetlag.physl.plugins import numpy as numphy
 
 # test sizes
 small = [2, 4, 8, 16]

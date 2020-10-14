@@ -11,9 +11,9 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 import ast
 from typing import Callable, Union, Any
 
-from phyfleaux.physl.core.task import Task
-from phyfleaux.physl.plugins.tiramisu import Buffer, Call, Computation, Expr, Function
-from phyfleaux.physl.plugins.tiramisu import Return, Var
+from jetlag.physl.core.task import Task
+from jetlag.physl.plugins.tiramisu import Buffer, Call, Computation, Expr, Function
+from jetlag.physl.plugins.tiramisu import Return, Var
 
 
 class Polytope(ast.NodeVisitor):
