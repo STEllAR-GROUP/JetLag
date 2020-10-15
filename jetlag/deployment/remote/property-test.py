@@ -6,11 +6,7 @@ from knownsystems import *
 
 if False:
     uv = Universal()
-    uv.init(
-      backend = backend_agave,
-      notify = 'sbrandt@cct.lsu.edu',
-      **shelob
-    )
+    uv.init(backend=backend_agave, notify='sbrandt@cct.lsu.edu', **shelob)
     uv.configure_from_ssh_keys()
 
 # Check configuration...
@@ -33,18 +29,20 @@ uv = Universal()
 uv.load(backend_tapis, 'sbrandt@cct.lsu.edu', 'rostam')
 uv.check_values(rostam)
 
+
 def dm(name):
-    for m in uv.get_meta('property-'+name):
+    for m in uv.get_meta('property-' + name):
         uv.del_meta(m)
+
 
 if True:
     dm('a')
     dm('b')
     dm('c')
 
-    uv.hello_world_job('fork',sets_props={'a'},needs_props={})
-    uv.hello_world_job('fork',sets_props={'b'},needs_props={'a'})
-    uv.hello_world_job('fork',sets_props={'c'},needs_props={'b'})
+    uv.hello_world_job('fork', sets_props={'a'}, needs_props={})
+    uv.hello_world_job('fork', sets_props={'b'}, needs_props={'a'})
+    uv.hello_world_job('fork', sets_props={'c'}, needs_props={'b'})
 
 while True:
     mav = ""
@@ -56,7 +54,7 @@ while True:
         mbv = mb["value"]
     for mc in uv.get_meta('property-c'):
         mcv = mc["value"]
-    print("m: a=",mav," b=",mbv," c=",mcv,sep='')
+    print("m: a=", mav, " b=", mbv, " c=", mcv, sep='')
     uv.poll()
     if mcv == "READY":
         assert mav == "READY"

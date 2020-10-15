@@ -12,13 +12,14 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 from collections import ChainMap
 from typing import Union
 
-
 current_namespace = []
+
 
 class Table:
     def add_symbol(self, symbol: Union[Buffer, Function, Call]):
         current_namespace.append(self.namespace)
-        
+
+
 class NameSpace:
     def __init__(self, namespace=None):
         self.namespace = namespace

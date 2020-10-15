@@ -3,14 +3,18 @@ import re, json, os
 from dateutil import parser
 import datetime, time
 
-def auth(user,passw,tenant,baseurl):
-    print("Running TAPIS AUTH")
-    os.environ["AGAVE_CACHE_DIR"]=os.environ["HOME"]+"/.agave"
 
-    p = Popen(["tapis","auth","tokens","refresh"])
+def auth(user, passw, tenant, baseurl):
+    print("Running TAPIS AUTH")
+    os.environ["AGAVE_CACHE_DIR"] = os.environ["HOME"] + "/.agave"
+
+    p = Popen(["tapis", "auth", "tokens", "refresh"])
     p.communicate()
     if p.returncode != 0:
-        cmd = ["tapis","auth","init","--tenant-id",tenant,"--username",user,"--password",passw]
+        cmd = [
+            "tapis", "auth", "init", "--tenant-id", tenant, "--username", user,
+            "--password", passw
+        ]
         print(' '.join(cmd))
         p2 = Popen(cmd)
         p2.communicate()

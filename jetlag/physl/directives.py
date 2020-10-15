@@ -20,9 +20,7 @@ def task(__task_arg=None, **kwargs):
     if callable(__task_arg):
         return Task(__task_arg)
     elif __task_arg is not None:
-        raise TypeError(
-            f"Function {task} expects {FunctionType} or {Task}"
-        )
+        raise TypeError(f"Function {task} expects {FunctionType} or {Task}")
     else:
         return Task
 

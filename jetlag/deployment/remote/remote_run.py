@@ -8,37 +8,40 @@ import inspect
 import codecs, pickle, re
 from visualizeInTraveler import *
 
+
 def to_string(obj):
-    return re.sub(b'\\s',b'',codecs.encode(pickle.dumps(obj),'base64'))
+    return re.sub(b'\\s', b'', codecs.encode(pickle.dumps(obj), 'base64'))
+
 
 def from_string(s):
-    return pickle.loads(codecs.decode(s,'base64'))
+    return pickle.loads(codecs.decode(s, 'base64'))
+
 
 def mk_label(fname, real_args):
     args = ''
     for i in range(len(real_args)):
-      if i > 0:
-        args += ','
-      sa = str(real_args[i])
-      if len(sa) > 5:
-          sa = sa[0:5]+"..."
-      args += str(sa)
+        if i > 0:
+            args += ','
+        sa = str(real_args[i])
+        if len(sa) > 5:
+            sa = sa[0:5] + "..."
+        args += str(sa)
     if len(args) > 10:
-      args=args[0:10]+"..."
-    return  html.escape(fname+"("+args + ")")
+        args = args[0:10] + "..."
+    return html.escape(fname + "(" + args + ")")
 
 
-
-def viz(job,verbose=False):
+def viz(job, verbose=False):
     try:
-      with open("run_dir/name.txt","r") as fd:
-        fname = fd.read().strip()
-      response = visualizeRemoteInTraveler(job.jobid,verbose=verbose)
+        with open("run_dir/name.txt", "r") as fd:
+            fname = fd.read().strip()
+        response = visualizeRemoteInTraveler(job.jobid, verbose=verbose)
     except Exception as e:
-      print("Could not visualize result, Traveler missing/unavailable:")
-      print("exception:",e)
-      #import traceback
-      #traceback.print_exc()
+        print("Could not visualize result, Traveler missing/unavailable:")
+        print("exception:", e)
+        #import traceback
+        #traceback.print_exc()
+
 
 def remote_run(uv, fun, args, queue='fork', lim='00:05:00', nodes=0, ppn=0):
     if hasattr(fun, "backend"):
@@ -51,10 +54,14 @@ def remote_run(uv, fun, args, queue='fork', lim='00:05:00', nodes=0, ppn=0):
     label = mk_label(funname, args)
 
     input_tgz = {
-      "py-src.txt" : src,
-      "label.txt" : label,
-      "name.txt" : funname,
-      "runapp.sh" : """#!/bin/bash
+        "py-src.txt":
+        src,
+        "label.txt":
+        label,
+        "name.txt":
+        funname,
+        "runapp.sh":
+        """#!/bin/bash
 source ../.env
 export CPUS=$(lscpu | grep "^CPU(s):"|cut -d: -f2)
 export APEX_OTF2=1
@@ -64,7 +71,8 @@ export PHYSL_EXE=/usr/local/build/bin/physl
 pwd
 singularity exec $SING_OPTS $JETLAG_IMAGE python3 command.py
 """,
-      "command.py" : """#!/usr/bin/env python3
+        "command.py":
+        """#!/usr/bin/env python3
 from phylanx import Phylanx, PhylanxSession
 import codecs, pickle, re, os, sys
 import numpy as np
@@ -169,5 +177,10 @@ with open("physl-src.txt","w") as fd:
 
 """.format(funsrc=src, funname=funname, argsrc=pargs)
     }
-    jobid = uv.run_job('py-fun',input_tgz,jtype=queue,run_time=lim,nodes=nodes,ppn=ppn)
-    return RemoteJobWatcher(uv,jobid)
+    jobid = uv.run_job('py-fun',
+                       input_tgz,
+                       jtype=queue,
+                       run_time=lim,
+                       nodes=nodes,
+                       ppn=ppn)
+    return RemoteJobWatcher(uv, jobid)
