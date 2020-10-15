@@ -17,10 +17,17 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Demo",
+            "name": "remote",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/demo.py",
+            "program": "${workspaceFolder}/demos/remote.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "phyfleaux",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/demos/phyfleaux.py",
             "console": "integratedTerminal"
         }
     ]
