@@ -58,7 +58,7 @@ class Polytope(ast.NodeVisitor):
 
     def __call__(self, *args, **kwargs):
         # self.isl_tree(*args, **kwargs)
-        self.task(*args, **kwargs)
+        return self.task(*args, **kwargs)
 
     def visit_Add(self, node: ast.Add) -> str:
         return '__Add__'
