@@ -38,7 +38,7 @@ backends = {
 }
 
 shelob = {
-  "jetlag_id" : "shelob-funwave",
+  #"jetlag_id" : "shelob-funwave",
   "machine_user" : "funwave",
   "machine" : 'shelob',
   "domain" : "hpc.lsu.edu",
@@ -67,7 +67,7 @@ shelob2["jetlag_id"] = "shelob-sbrandt"
 shelob2["machine_user"] = "sbrandt"
 
 rostam = {
-  "jetlag_id" : "rostam-sbrandt",
+  #"jetlag_id" : "rostam-sbrandt",
   "machine_user" : "sbrandt",
   "machine" : 'rostam',
   "domain" : "cct.lsu.edu",
@@ -80,8 +80,10 @@ rostam = {
   "max_procs_per_node" : 16,
   "min_procs_per_node" : 1,
   "scheduler" : "SLURM",
-  "scratch_dir" : "/home/{machine_user}",
-  "work_dir" : "/home/{machine_user}",
+  "scratch_dir" : "/work/{machine_user}",
+  "work_dir" : "/work/{machine_user}",
+  "home_dir" : "/home/{machine_user}/root/home",
+  "root_dir" : "/home/{machine_user}/root",
   "allocation" : "medusa"
 }
 

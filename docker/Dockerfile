@@ -6,8 +6,9 @@ RUN dnf install -y curl findutils vim git which jq python3 python3-pip gcc gcc-c
 RUN pip3 install jupyter requests numpy scipy matplotlib tzupdate email-validator gui_fun
 
 WORKDIR /
-RUN git clone -b main https://github.com/hdc-arizona/traveler-integrated
+RUN git clone https://github.com/hdc-arizona/traveler-integrated
 WORKDIR /traveler-integrated
+RUN git checkout origin/ui-overhaul
 RUN find . | xargs chown jovyan
 RUN pip3 install -r requirements.txt
 WORKDIR /traveler-integrated/profiling_tools/clibs
@@ -15,8 +16,10 @@ RUN python3 rp_extension_build.py
 RUN mv _cCalcBin.*.so ..
 
 WORKDIR /
-RUN git clone https://github.com/STEllAR-GROUP/JetLag.git
+#RUN git clone https://github.com/STEllAR-GROUP/JetLag.git
+RUN git clone https://github.com/alex-r-bigelow/JetLag.git
 WORKDIR /JetLag
+RUN git checkout origin/ui-overhaul
 RUN find . | xargs chown jovyan
 
 WORKDIR /traveler-integrated

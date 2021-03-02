@@ -1,36 +1,53 @@
-from jetlag import Universal, pp, mk_input, pcmd, RemoteJobWatcher
+#!/usr/bin/env python3
+from jetlag import Auth, JetLag, pp, mk_input, pcmd, RemoteJob, set_verbose, clone_machine
 from knownsystems import *
+
 from time import sleep
 import os
 import html
 import re
 
-# Test creation of shelob configuration using Agave
-uv = Universal()
-uv.init(
-  backend = backend_tapis,
-  #notify = "https://www.cct.lsu.edu/~sbrandt/pushbullet.php?key={PBTOK_PASSWORD}&status=${JOB_STATUS}:${JOB_ID}",
-  notify='sbrandt@cct.lsu.edu',
+set_verbose(True)
+
+auth = Auth(utype='agave', user='sbrandt', baseurl='https://2-2-27.dev.k8s.agaveplatform.org')
+auth.create_or_refresh_token()
+#os.unlink(auth.get_auth_file())
+#auth = Auth(utype='tapis', user=os.environ["TEST_USER"])
+#auth.create_or_refresh_token()
+
+rostam["work_dir"]='/work/sbrandt'
+rostam["scratch_dir"]='/work/sbrandt'
+rostam["root_dir"]='/'
+rostam["home_dir"]='/home/sbrandt/root/home'
+uv = JetLag(auth,
   **rostam
 )
-uv.configure_from_ssh_keys()
+if False:
+  uv = clone_machine(auth,
+    name='rostam-sbrandt-exec-sbrandt',
+    user="sbrandt",
+    work_dir='/work/sbrandt',
+    scratch_dir='/work/sbrandt',
+    root_dir="/",
+    home_dir="/home/sbrandt/root/home")
+uv.configure()
 
-j1 = RemoteJobWatcher(uv, uv.hello_world_job('fork'))
+j1 = uv.hello_world_job('fork')
 print("Job was submitted")
 j1.wait()
 assert j1.status() == "FINISHED"
 err = j1.err_output()
-assert re.search(r'(?m)^This is stderr', err)
+assert re.search(r'(?m)^This is stderr', err), err
 out = j1.std_output()
-assert re.search(r'(?m)^This is stdout', out)
-    
-if True: # This does not work with Agave
-    j2 = RemoteJobWatcher(uv, uv.hello_world_job('queue'))
+assert re.search(r'(?m)^This is stdout', out), out
+
+if True: 
+    j2 = uv.hello_world_job('queue')
     print("Job was submitted")
     j2.wait()
     assert j2.status() == "FINISHED"
 else:
-    print("Test skipped: Tapis can't queue on slurm")
+    print("Test skipped: Agave can't queue on slurm")
 
 
 print("Test passed")

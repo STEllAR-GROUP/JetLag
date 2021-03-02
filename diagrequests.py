@@ -5,6 +5,17 @@ pp = pprint.PrettyPrinter(indent=4)
 
 save = None
 
+verify_ssl_env = os.environ.get("VERIFY_SSL","yes").lower()
+assert verify_ssl_env in ["yes", "no"], "VERIFY_SSL must be YES or NO"
+verify_ssl = verify_ssl_env == "yes"
+
+if verify_ssl == False:
+    if "PYTHONWARNINGS" not in os.environ:
+        print("Disabling SSL Verification, consider setting env variable...")
+        print("export PYTHONWARNINGS='ignore:Unverified HTTPS request'")
+    else:
+        print("Disabling SSL Verification")
+
 def all(mname, args, kargs, verbose=False):
     global save
     if "JETLAG_DEBUG" in os.environ or verbose:
@@ -40,16 +51,20 @@ def show():
 
 def get(*args,**kargs):
     all("get",args,kargs)
+    kargs["verify"] = verify_ssl
     return requests.get(*args,**kargs)
 
 def post(*args,**kargs):
     all("post",args,kargs)
+    kargs["verify"] = verify_ssl
     return requests.post(*args,**kargs)
 
 def delete(*args,**kargs):
     all("delete",args,kargs)
+    kargs["verify"] = verify_ssl
     return requests.delete(*args,**kargs)
 
 def put(*args,**kargs):
     all("put",args,kargs)
+    kargs["verify"] = verify_ssl
     return requests.put(*args,**kargs)
