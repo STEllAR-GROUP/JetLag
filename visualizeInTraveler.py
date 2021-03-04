@@ -105,10 +105,10 @@ def visualizeInTraveler(fun, verbose=False):
 def visualizeDirInTraveler(jobid, pre, verbose=False):
     # Read any small text files that exist
     argMap = {
-        'csv': pre+'/py-csv.txt',
+        'csv':    pre+'/py-csv.txt',
         'newick': pre+'/py-tree.txt',
-        'dot': pre+'/py-graph.txt',
-        'physl': pre+'/physl-src.txt',
+        'dot':    pre+'/py-graph.txt',
+        'physl':  pre+'/physl-src.txt',
         'python': pre+'/py-src.txt'
     }
     postData = {
