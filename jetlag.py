@@ -239,6 +239,7 @@ class Auth:
     The Universal (i.e. Tapis or Agave) authorization
     """
     def __init__(self, utype, user=None, password=None, baseurl=None, tenant=None):
+        self.is_valid = False
         if utype not in ["tapis", "agave"]:
             sessions = \
                 get_current(os.path.join(home, ".agave")) + \
