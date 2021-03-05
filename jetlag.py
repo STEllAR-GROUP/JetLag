@@ -564,6 +564,8 @@ class JetLag:
             pub_key = os.path.join(os.environ["HOME"], ".ssh", "id_rsa.pub")
         if priv_key is None:
             priv_key = os.path.join(os.environ["HOME"], ".ssh", "id_rsa")
+        if not os.path.exists(pub_key):
+            pcmd(["ssh-keygen"],input="\n"*5)
         if os.path.exists(pub_key):
             with open(pub_key, "r") as fd:
                 self.pub_key = fd.read().strip()
@@ -1841,6 +1843,27 @@ class RemoteJob:
     def stop(self):
         self.jlag.job_stop(self.job_id)
 
+    def diag(self):
+        jl = self.jlag
+        job_id = self.job_id
+        status = jl.job_status(job_id)
+        if status is None:
+            print(colored("No such job:","red"),job_id)
+            exit(2)
+        if "lastStatusMessage" in status:
+            print(colored("Last Status:","green"),status["lastStatusMessage"])
+        for item in jl.job_history(job_id):
+            n += 1
+            status = item["status"]
+            color = get_status_color(status)
+            print(n,colored(status, color))
+            dt, secs = from_agave_time(item["created"])
+            if last_secs is None:
+                last_secs = secs
+            else:
+                print(" ",dt," ",colored(ago(last_secs - secs),"yellow"))
+            print(" ",item["description"])
+
 class Action:
 
     def __init__(self, auth):
@@ -1871,23 +1894,8 @@ class Action:
         jl = JetLag(self.auth)
         last_secs = None
         n = 0
-        status = jl.job_status(job_id)
-        if status is None:
-            print(colored("No such job:","red"),job_id)
-            exit(2)
-        if "lastStatusMessage" in status:
-            print(colored("Last Status:","green"),status["lastStatusMessage"])
-        for item in jl.job_history(job_id):
-            n += 1
-            status = item["status"]
-            color = get_status_color(status)
-            print(n,colored(status, color))
-            dt, secs = from_agave_time(item["created"])
-            if last_secs is None:
-                last_secs = secs
-            else:
-                print(" ",dt," ",colored(ago(last_secs - secs),"yellow"))
-            print(" ",item["description"])
+        job = RemoteJob(jl, job_id)
+        jl.diag()
 
     def job_list(self):
         if len(cmd_args) < 5:

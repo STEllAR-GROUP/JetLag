@@ -1,4 +1,4 @@
-from jetlag import Universal, pp, mk_input, pcmd, RemoteJobWatcher
+from jetlag import pp, mk_input, pcmd
 from knownsystems import *
 from time import sleep
 import os
@@ -241,5 +241,5 @@ with open("physl-src.txt","w") as fd:
 
 """.format(funsrc=src, funname=funname, argsrc=pargs)
     }
-    jobid = uv.run_job('py-fun',input_tgz,jtype=queue,run_time=lim,nodes=nodes,ppn=ppn)
-    return RemoteJobWatcher(uv,jobid)
+    job = uv.run_job('py-fun',input_tgz,jtype=queue,run_time=lim,nodes=nodes,ppn=ppn)
+    return job
