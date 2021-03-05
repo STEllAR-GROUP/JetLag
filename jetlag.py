@@ -1848,22 +1848,34 @@ class RemoteJob:
         jl = self.jlag
         job_id = self.job_id
         status = jl.job_status(job_id)
+        ret = {}
         if status is None:
             print(colored("No such job:","red"),job_id)
             exit(2)
         if "lastStatusMessage" in status:
-            print(colored("Last Status:","green"),status["lastStatusMessage"])
-        for item in jl.job_history(job_id):
+            if verbose:
+                print(colored("Last Status:","green"),status["lastStatusMessage"])
+            ret["lastStatusMessage"] = status["lastStatusMessage"]
+        n = 0
+        last_secs = None
+        history = jl.job_history(job_id)
+        ret["history"] = history
+        for item in history:
             n += 1
             status = item["status"]
             color = get_status_color(status)
-            print(n,colored(status, color))
+            if verbose:
+                print(n,colored(status, color))
             dt, secs = from_agave_time(item["created"])
             if last_secs is None:
                 last_secs = secs
             else:
-                print(" ",dt," ",colored(ago(last_secs - secs),"yellow"))
-            print(" ",item["description"])
+                if verbose:
+                    print(" ",dt," ",colored(ago(last_secs - secs),"yellow"))
+            if verbose:
+                print(" ",item["description"])
+
+        return ret
 
 class Action:
 
@@ -1893,10 +1905,8 @@ class Action:
             exit(2)
         job_id = cmd_args[4]
         jl = JetLag(self.auth)
-        last_secs = None
-        n = 0
         job = RemoteJob(jl, job_id)
-        jl.diag()
+        job.diag()
 
     def job_list(self):
         if len(cmd_args) < 5:
