@@ -162,21 +162,30 @@ def pause_():
 def pause():
     global time_array
     home = os.environ['HOME']
-    tmp_dir = home+"/tmp/times"
+    tmp_dir = os.path.join(home,"tmp","times")
     if len(time_array) == 0:
         os.makedirs(tmp_dir, exist_ok=True)
         time_array = []
         for i in range(pause_files):
-            tmp_file = tmp_dir+"/t_"+str(i)
+            tmp_file = os.path.join(tmp_dir,"t_"+str(i))
             if not os.path.exists(tmp_file):
                 with open(tmp_file,"w") as fd:
                     pass
             tmp_age = os.path.getmtime(tmp_file)
-            time_array += [[tmp_file,tmp_age-pause_time]]
+            time_array += [[tmp_file,tmp_age]]
+
+    # For some reason, time() doesn't always return
+    # a value of now that's consistent with the file system.
+    now_file = os.path.join(tmp_dir, "now_file.txt")
+    with open(now_file, "w"):
+        pass
+    now = os.path.getmtime(now_file)
+
     time_array = sorted(time_array,key=key2)
-    stime = time_array[0][1]+pause_time
-    now = time()
-    delt = stime - now
+    oldest_file = time_array[0][1]
+    assert oldest_file < now
+    delt = oldest_file + pause_time - now
+    assert delt < pause_time
     if delt > 0:
         sleep(delt)
     with open(time_array[0][0],"w") as fd:
@@ -400,6 +409,11 @@ class Auth:
         auth_file = self.get_auth_file()
         if self.auth_data is None:
             self.get_auth_data()
+            if "verify_ssl" in self.auth_data:
+                if not self.auth_data["verify_ssl"]:
+                    if verbose: 
+                        print("Setting VERIFY_SSL to False")
+                        requests.verify_ssl = False
         if not os.path.exists(auth_file):
             return False 
         if age(auth_file) < 30*60:
@@ -501,7 +515,7 @@ class JetLag:
             min_procs_per_node=16,allocation="N/A",
             scheduler="SLURM",custom_directives=None,
             owner=None,suffix=None,
-            pub_key=None, priv_key=None, jetlag_id=None):
+            priv_key=None, jetlag_id=None):
 
         self.agave_auth = agave_auth
 
@@ -561,12 +575,21 @@ class JetLag:
         self.fork_app_id = self.fill("{machine}-{machine_user}_fork_{suffix}-1.0.0")
         self.deployment_path = self.fill("new-{utype}-deployment")
 
-        if pub_key is None:
-            pub_key = os.path.join(os.environ["HOME"], ".ssh", "id_rsa.pub")
         if priv_key is None:
-            priv_key = os.path.join(os.environ["HOME"], ".ssh", "id_rsa")
-        if not os.path.exists(pub_key):
-            pcmd(["ssh-keygen"],input="\n"*5)
+            key_dir = os.path.dirname(self.agave_auth.get_auth_file())
+            priv_key = os.path.join(key_dir, "id_rsa")
+            if verbose:
+                print(colored("Using key:","green"),priv_key)
+        else:
+            key_dir = os.path.dirname(priv_key)
+
+        pub_key = priv_key + '.pub'
+        if not os.path.exists(priv_key):
+            os.makedirs(key_dir,exist_ok=True)
+            if verbose:
+                print(colored("Creating key:","green"),priv_key)
+            r, o, e = pcmd(["ssh-keygen","-m","PEM","-t","rsa","-f",priv_key,"-P",""])
+
         if os.path.exists(pub_key):
             with open(pub_key, "r") as fd:
                 self.pub_key = fd.read().strip()
@@ -770,7 +793,7 @@ class JetLag:
 
         if self.custom_directives is not None:
             for q in execm["queues"]:
-                q["customDirectives"] = self.custom_directives
+                q["customDirectives"] = self.fill(self.custom_directives)
 
         assert execm["scheduler"] != "FORK"
 

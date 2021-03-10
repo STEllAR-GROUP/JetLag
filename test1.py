@@ -21,6 +21,7 @@ rostam["home_dir"]='/home/sbrandt/root/home'
 uv = JetLag(auth,
   **rostam
 )
+uv.configure()
 if False:
   uv = clone_machine(auth,
     name='rostam-sbrandt-exec-tg457049',

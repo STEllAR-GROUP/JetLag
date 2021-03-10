@@ -18,7 +18,7 @@ RUN mv _cCalcBin.*.so ..
 WORKDIR /
 RUN git clone https://github.com/STEllAR-GROUP/JetLag.git
 WORKDIR /JetLag
-#RUN git checkout origin/ui-overhaul
+RUN git checkout jetlag2
 RUN find . | xargs chown jovyan
 
 WORKDIR /traveler-integrated

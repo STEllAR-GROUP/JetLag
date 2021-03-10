@@ -9,9 +9,10 @@ import html
 set_verbose(True)
 
 # Test creation of shelob configuration using Agave
-auth = Auth(utype='tapis', user=os.environ["TEST_USER"])
+auth = Auth(utype='tapis', user='tg457049')
 auth.create_or_refresh_token()
-uv = JetLag(auth, machine='rostam', machine_user='sbrandt', owner='tg457049')
+uv = JetLag(auth, **shelob)
+uv.configure()
 
 j1 = uv.hello_world_job('fork')
 print("Job was submitted")
