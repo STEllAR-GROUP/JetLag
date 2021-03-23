@@ -515,11 +515,9 @@ class JetLag:
             min_procs_per_node=16,allocation="N/A",
             scheduler="SLURM",custom_directives=None,
             owner=None,suffix=None,
-            script='helloworld.sh',
             priv_key=None, jetlag_id=None):
 
         self.agave_auth = agave_auth
-        self.script = script
 
         if jetlag_id is not None:
             g = re.match(r'^(\w+)-(\w+)-(\w+)$', jetlag_id)
@@ -839,7 +837,7 @@ class JetLag:
         export nx=${nx}
         export ny=${ny}
         export nz=${nz}
-        sh -c "${HOME}/exe/"""+self.script+'"'
+        sh -c "${HOME}/exe/${script_name}.sh" """
 
         app_name = self.app_name
         app_version = self.app_version
@@ -1024,6 +1022,30 @@ class JetLag:
                     "maxCardinality": 1,
                     "ontology": []
                   }
+                },
+                {
+                  "id": "script_name",
+                  "value": {
+                    "visible": True,
+                    "required": False,
+                    "type": "string",
+                    "order": 0,
+                    "enquote": False,
+                    "default": "hello",
+                    "validator": r"^\S+$"
+                  },
+                  "details": {
+                    "label": "script_name",
+                    "description": "Script to run from ~/exe",
+                    "argument": None,
+                    "showArgument": False,
+                    "repeatArgument": False
+                  },
+                  "semantics": {
+                    "minCardinality": 1,
+                    "maxCardinality": 1,
+                    "ontology": []
+                  }
                 }
             ],
             "outputs":[  
@@ -1118,19 +1140,11 @@ class JetLag:
         Create and send a "Hello World" job to make
         sure that the system is working.
         """
-        input_tgz = {
-            "runapp.sh":"""
-          #!/bin/bash
-          hostname
-          echo This is stdout
-          echo This is stderr >&2
-          sleep %d
-        """.lstrip() % sleep_time
-        }
+        input_tgz = {}
 
         return self.run_job('hello-world', input_tgz, jtype=jtype, run_time="00:01:00", sets_props=sets_props, needs_props=needs_props)
 
-    def run_job(self, job_name, input_tgz=None, jtype='fork', nodes=0, ppn=0, run_time=None, sets_props={}, needs_props={}, nx=0, ny=0, nz=0):
+    def run_job(self, job_name, input_tgz=None, jtype='fork', nodes=0, ppn=0, run_time=None, sets_props={}, needs_props={}, nx=0, ny=0, nz=0, script_name='helloworld'):
         """
         Run a job. It must have a name and an input tarball. It will default
         to running in a queue, but fork can also be requested. Specifying
@@ -1202,7 +1216,8 @@ class JetLag:
                 "needs_props":",".join(sets_props),
                 "nx":nx,
                 "ny":ny,
-                "nz":nz
+                "nz":nz,
+                "script_name":script_name
             },
             "notifications": []
         })
