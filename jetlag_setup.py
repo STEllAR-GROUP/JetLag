@@ -5,35 +5,27 @@ class Loader:
     def __init__(self):
         self.auth = None
         self.jlag = None
+        settings(self.loadf,{"password":"password","utype":["tapis","agave"]})
+        self.r=gui_fun(self.loadf)
+        self.r.add_listener(self.on_load)
+
     def loadf(self, utype, user=None, password=None, baseurl=None, tenant=None):
         self.auth = Auth(utype, user, password, baseurl, tenant)
         self.jlag = JetLag(self.auth)
 
-loader = Loader()
+    def query_jetlag_id(self, jid):
+        return jid
 
-settings(loader.loadf,{"password":"password","utype":["tapis","agave"]})
-r=gui_fun(loader.loadf)
-uv = None
+    def set_jetlag_id(self, jid):
+        self.jlag = JetLag(self.auth, jetlag_id=jid)
+        print("jetlag id set to:",jid)
 
-def query_jetlag_id(jid):
-    return jid
+    def on_load(self, _):
+        jids = self.jlag.jetlag_ids()
+        settings(self.query_jetlag_id,{"jid":jids})
+        if len(jids)==0:
+            print("You are not authorized to use JetLag. Contact sbrandt@cct.lsu.edu")
+        else:
+            res = gui_fun(self.query_jetlag_id)
+            res.add_listener(self.set_jetlag_id)
 
-
-def set_jetlag_id(jid):
-    global uv
-    loader.jlag = JetLag(loader.auth, jetlag_id=jid)
-    print("jetlag id set to:",jid)
-    uv = loader.jlag
-
-
-def on_load(_):
-    jids = loader.jlag.jetlag_ids()
-    if len(jids)==0:
-        print("You are not authorized to use JetLag. Contact sbrandt@cct.lsu.edu")
-    else:
-        settings(query_jetlag_id,{"jid":jids})
-        res = gui_fun(query_jetlag_id)
-        res.add_listener(set_jetlag_id)
-
-
-r.add_listener(on_load)
