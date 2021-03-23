@@ -30,7 +30,7 @@ if False:
     scratch_dir='/work/sbrandt',
     root_dir="/",
     home_dir="/home/sbrandt/root/home")
-uv.configure()
+  uv.configure()
 
 j1 = uv.hello_world_job('fork')
 print("Job was submitted")

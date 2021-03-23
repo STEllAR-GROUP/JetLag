@@ -515,9 +515,11 @@ class JetLag:
             min_procs_per_node=16,allocation="N/A",
             scheduler="SLURM",custom_directives=None,
             owner=None,suffix=None,
+            script='helloworld.sh',
             priv_key=None, jetlag_id=None):
 
         self.agave_auth = agave_auth
+        self.script = script
 
         if jetlag_id is not None:
             g = re.match(r'^(\w+)-(\w+)-(\w+)$', jetlag_id)
@@ -832,28 +834,12 @@ class JetLag:
     def mk_app(self,force=True):
 
         wrapper = """#!/bin/bash
-        handle_trap() {
-            rc=$?
-            set +x
-            if [ "$rc" != 0 ]
-            then
-              true # this command does nothing
-              $(${AGAVE_JOB_CALLBACK_FAILURE})
-            fi
-            echo "EXIT($rc)" > run_dir/return_code.txt
-            tar czf output.tgz run_dir
-        }
-        trap handle_trap ERR EXIT
-        set -ex
-
-        tar xzvf input.tgz
-        echo "export AGAVE_JOB_NODE_COUNT=${AGAVE_JOB_NODE_COUNT}" > .env
-        echo "export AGAVE_JOB_PROCESSORS_PER_NODE=${AGAVE_JOB_PROCESSORS_PER_NODE}" >> .env
-        echo "export nx=${nx}" >> .env
-        echo "export ny=${ny}" >> .env
-        echo "export nz=${nz}" >> .env
-        (cd ./run_dir && source ./runapp.sh)
-        """
+        export AGAVE_JOB_NODE_COUNT=${AGAVE_JOB_NODE_COUNT}
+        export AGAVE_JOB_PROCESSORS_PER_NODE=${AGAVE_JOB_PROCESSORS_PER_NODE}
+        export nx=${nx}
+        export ny=${ny}
+        export nz=${nz}
+        sh -c "${HOME}/exe/"""+self.script+'"'
 
         app_name = self.app_name
         app_version = self.app_version
@@ -1821,10 +1807,14 @@ class RemoteJob:
             if not os.path.exists(jobdir):
                 os.makedirs(jobdir, exist_ok=True)
             if not os.path.exists(os.path.join(jobdir,"output.tgz")):
-                self.jlag.get_file(self.job_id,"output.tgz",jobdir+"/output.tgz")
-                pcmd(["tar","xf","output.tgz"],cwd=jobdir)
-                if self.jdata is None:
-                    self.status(self.job_id)
+                try:
+                    self.jlag.get_file(self.job_id,"output.tgz",jobdir+"/output.tgz")
+                    pcmd(["tar","xf","output.tgz"],cwd=jobdir)
+                    if self.jdata is None:
+                        self.status(self.job_id)
+                except:
+                    if verbose:
+                        print(colored("Could not get output.tgz","red"))
             out_file = os.path.join(jobdir,"job.out")
             err_file = os.path.join(jobdir,"job.err")
             outs = self.jlag.fetch_job(self.job_id,recurse=False)
@@ -1904,6 +1894,20 @@ class Action:
 
     def __init__(self, auth):
         self.auth = auth
+
+    def hello_world(self):
+        if len(cmd_args) < 5:
+            print("hello-world requires jetlag-id [fork/queue]")
+            exit(2)
+        jetlag_id = cmd_args[4]
+        jl = JetLag(self.auth, jetlag_id=jetlag_id)
+        if len(cmd_args) == 6:
+            jtype = cmd_args[5]
+        else:
+            jtype = "fork"
+        job = jl.hello_world_job(jtype=jtype)
+        job.wait()
+        print(job.get_result())
 
     def system_info(self):
         if len(cmd_args) < 5:
