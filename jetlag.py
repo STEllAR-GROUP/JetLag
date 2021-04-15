@@ -1842,9 +1842,9 @@ class RemoteJob:
             for out in outs:
                 g = re.match(r'.*(?:\.(out|err))$',out)
                 if g:
-                    out_file = os.path.join(jobdir, "job.%s" % g.group(1))
-                    if not os.path.exists(out_file):
-                        self.jlag.get_file(self.job_id, out, out_file)
+                    tmp_file = os.path.join(jobdir, "job.%s" % g.group(1))
+                    if not os.path.exists(tmp_file):
+                        self.jlag.get_file(self.job_id, out, tmp_file)
             # Did the job create a result file that was consumable by Python?
             if os.path.exists(os.path.join(jobdir,'run_dir','result.py')):
                 with open(os.path.join(jobdir,'run_dir','result.py'),"r") as fd:
