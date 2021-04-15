@@ -92,6 +92,7 @@ def from_agave_time(ts):
     from time import mktime, time
     from datetime import datetime
     import re
+    # To install: pip install python-dateutil
     from dateutil import tz
     utc_time = ts[-1] == 'Z'
     g = re.search(r'\.\d+',ts)
