@@ -67,7 +67,6 @@ def all(mname, args, kargs, verbose=False):
         debug_fd = sys.stdout
 
     if debug_fd is not None:
-        assert debug_fd != sys.stdout
         with redirect_stdout(debug_fd):
             print()
             print("="*50)
