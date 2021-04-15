@@ -56,12 +56,9 @@ def all(mname, args, kargs, verbose=False):
     jetlag_debug = os.environ.get("JETLAG_DEBUG", "0")
     if jetlag_debug in ["stdout","1"]:
         debug_fd = sys.stdout
-        print("Setting log to stdout")
     elif re.match(r'.*\.(txt|log)', jetlag_debug):
-        print("Setting log to",jetlag_debug)
         debug_fd = open(jetlag_debug,"a+")
     elif jetlag_debug in ["0", "/dev/null", "no", "none"]:
-        print("Setting log to none")
         debug_fd = None
     if verbose and debug_fd is None:
         debug_fd = sys.stdout

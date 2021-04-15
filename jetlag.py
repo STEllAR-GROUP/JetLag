@@ -1475,7 +1475,8 @@ class JetLag:
         mlist = self.get_meta(data["name"])
 
         headers = self.get_headers()
-        headers['Content-Type'] = 'application/json'
+        # This is wrong
+        # headers['Content-Type'] = 'application/json'
 
         files = {
             'fileToUpload': ('meta.txt', json.dumps(data)),
