@@ -53,7 +53,7 @@ if verify_ssl == False:
 
 def all(mname, args, kargs, verbose=False):
     global save
-    jetlag_debug = os.environ.get("JETLAG_DEBUG", "stdout")
+    jetlag_debug = os.environ.get("JETLAG_DEBUG", "0")
     if jetlag_debug in ["stdout","1"]:
         debug_fd = sys.stdout
         print("Setting log to stdout")
