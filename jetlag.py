@@ -410,7 +410,7 @@ class Auth:
         auth_file = self.get_auth_file()
         if self.auth_data is None:
             self.get_auth_data()
-            if "verify_ssl" in self.auth_data:
+            if self.auth_data is not None and "verify_ssl" in self.auth_data:
                 if not self.auth_data["verify_ssl"]:
                     if verbose: 
                         print("Setting VERIFY_SSL to False")
