@@ -15,14 +15,14 @@ auth.create_or_refresh_token()
 #auth = Auth(utype='tapis', user=os.environ["TEST_USER"])
 #auth.create_or_refresh_token()
 
-rostam["work_dir"]='/work/sbrandt'
-rostam["scratch_dir"]='/work/sbrandt'
-rostam["root_dir"]='/'
-rostam["home_dir"]='/home/sbrandt/root/home'
+rostam["work_dir"]='/home/sbrandt/agave-work'
+rostam["scratch_dir"]='/home/sbrandt/agave-scratch'
+rostam["root_dir"]='/home/sbrandt/agave-root'
+rostam["home_dir"]='/'
 uv = JetLag(auth,
   **rostam
 )
-if False:
+if True:
   uv = clone_machine(auth,
     name='rostam-sbrandt-exec-sbrandt',
     user="sbrandt",
@@ -30,6 +30,7 @@ if False:
     scratch_dir='/work/sbrandt',
     root_dir="/",
     home_dir="/home/sbrandt/root/home")
+print("Call configure...")
 uv.configure()
 
 j1 = uv.hello_world_job('fork')

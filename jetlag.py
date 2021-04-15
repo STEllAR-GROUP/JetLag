@@ -670,7 +670,7 @@ class JetLag:
         }
         if data is not None:
             assert type(data) == str
-            headers['Content-type'] = 'application/json'
+            headers['Content-Type'] = 'application/json'
             headers['Content-Length'] = str(len(data))
         return headers
 
@@ -687,6 +687,8 @@ class JetLag:
         pause()
         response = requests.get(url, headers=headers, params=params)
         if response.status_code == 404:
+            if verbose:
+                print(colored("Received 404 from URL","red"),url)
             return False
         check(response)
         file_data = response.json()["result"]
@@ -1472,6 +1474,7 @@ class JetLag:
         mlist = self.get_meta(data["name"])
 
         headers = self.get_headers()
+        headers['Content-Type'] = 'application/json'
 
         files = {
             'fileToUpload': ('meta.txt', json.dumps(data)),
@@ -1800,6 +1803,8 @@ class RemoteJob:
                 c = get_status_color(n)
                 print(colored(n,c))
                 s = n
+            else:
+                print("  ",colored(n,c))
             sleep(poll_time)
             if n in job_done:
                 return
