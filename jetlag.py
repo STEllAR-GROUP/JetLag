@@ -706,7 +706,7 @@ class JetLag:
         storage_id = self.storage_id
 
         if verbose:
-            print(colored("Storage Machine:","green"),storage_id)
+            print(colored("Creating Storage Machine:","green"),storage_id)
 
         port = int(self.port)
 
@@ -745,7 +745,7 @@ class JetLag:
     def mk_execution(self,force=False):
 
         if verbose:
-            print(colored("Execution Machine:","green"),self.execm_id)
+            print(colored("Creating Execution Machine:","green"),self.execm_id)
 
         execm = self.fill({
             "id" : self.execm_id,
