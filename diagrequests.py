@@ -4,38 +4,39 @@ import re
 import sys
 from contextlib import redirect_stdout
 import pprint
+from datetime import datetime
 
-def pprint(obj,indent=0):
+def pprint(obj,indent=0,fd=sys.stdout):
     t = type(obj)
     if t in [list, set, tuple]:
         if t == tuple:
-            print("tuple(")
+            print("tuple(",file=fd)
         elif t == set:
-            print("set{")
+            print("set{",file=fd)
         else:
-            print("list[")
+            print("list[",file=fd)
         key = 0
         for elem in obj:
-            print(" "*(indent+2),key,": ",end='',sep='')
-            pprint(elem,indent=indent+2)
+            print(" "*(indent+2),key,": ",end='',sep='',file=fd)
+            pprint(elem,indent=indent+2,fd=fd)
             key += 1
         if t == tuple:
-            print(" "*indent,")",sep="")
+            print(" "*indent,")",sep="",file=fd)
         elif t == set:
-            print(" "*indent,"}",sep="")
+            print(" "*indent,"}",sep="",file=fd)
         else:
-            print(" "*indent,"]",sep="")
+            print(" "*indent,"]",sep="",file=fd)
     elif t == dict:
-        print("dict{",sep="")
+        print("dict{",sep="",file=fd)
         for key in obj:
             val = obj[key]
-            print(" "*(indent+2),key,": ",end='',sep='')
-            pprint(val,indent=indent+2)
-        print(" "*indent,"}",sep="")
+            print(" "*(indent+2),key,": ",end='',sep='',file=fd)
+            pprint(val,indent=indent+2,fd=fd)
+        print(" "*indent,"}",sep="",file=fd)
     elif t == str:
-        print('"',re.sub(r'"','\\"',obj),'"',sep='')
+        print('"',re.sub(r'"','\\"',obj),'"',sep='',file=fd)
     else:
-        print(obj)
+        print(obj,file=fd)
 
 save = None
 
@@ -64,14 +65,15 @@ def all(mname, args, kargs, verbose=False):
         debug_fd = sys.stdout
 
     if debug_fd is not None:
-        with redirect_stdout(debug_fd):
-            print()
-            print("="*50)
-            print("requests => ",mname,"(*args, **kargs)")
-            print(" where ")
-            print("args:")
-            pprint(args)
-            print("kargs:")
+        if True: #with redirect_stdout(debug_fd):
+            print(file=debug_fd)
+            print("="*50,file=debug_fd)
+            print(datetime.now(),file=debug_fd)
+            print("requests => ",mname,"(*args, **kargs)",file=debug_fd)
+            print(" where ",file=debug_fd)
+            print("args:",file=debug_fd)
+            pprint(args,fd=debug_fd)
+            print("kargs:",file=debug_fd)
             k = 'Authorization'
             h = kargs.get("auth",None)
             if h is not None and type(h) == tuple:
@@ -83,11 +85,11 @@ def all(mname, args, kargs, verbose=False):
                     h[k] = "[hidden]"
             else:
                 auth = None
-            pprint(kargs)
+            pprint(kargs,fd=debug_fd)
             if auth is not None:
                 h[k] = auth
-            print("="*50)
-            print()
+            print("="*50,file=debug_fd)
+            print(file=debug_fd)
     else:
         save = (mname, args, kargs)
 
