@@ -6,6 +6,8 @@ from contextlib import redirect_stdout
 import pprint
 from datetime import datetime
 
+hidden = set()
+
 def pprint(obj,indent=0,fd=sys.stdout):
     t = type(obj)
     if t in [list, set, tuple]:
@@ -34,7 +36,10 @@ def pprint(obj,indent=0,fd=sys.stdout):
             pprint(val,indent=indent+2,fd=fd)
         print(" "*indent,"}",sep="",file=fd)
     elif t == str:
-        print('"',re.sub(r'"','\\"',obj),'"',sep='',file=fd)
+        if obj in hidden:
+            print("[hidden]",file=fd)
+        else:
+            print('"',re.sub(r'"','\\"',obj),'"',sep='',file=fd)
     else:
         print(obj,file=fd)
 
@@ -65,31 +70,30 @@ def all(mname, args, kargs, verbose=False):
         debug_fd = sys.stdout
 
     if debug_fd is not None:
-        if True: #with redirect_stdout(debug_fd):
-            print(file=debug_fd)
-            print("="*50,file=debug_fd)
-            print(datetime.now(),file=debug_fd)
-            print("requests => ",mname,"(*args, **kargs)",file=debug_fd)
-            print(" where ",file=debug_fd)
-            print("args:",file=debug_fd)
-            pprint(args,fd=debug_fd)
-            print("kargs:",file=debug_fd)
-            k = 'Authorization'
-            h = kargs.get("auth",None)
-            if h is not None and type(h) == tuple:
-                kargs["auth"] = (h[0],"[hidden]")
-            h = kargs.get('headers',None)
-            if h is not None:
-                auth = h.get(k, None)
-                if auth is not None:
-                    h[k] = "[hidden]"
-            else:
-                auth = None
-            pprint(kargs,fd=debug_fd)
+        print(file=debug_fd)
+        print("="*50,file=debug_fd)
+        print(datetime.now(),file=debug_fd)
+        print("requests => ",mname,"(*args, **kargs)",file=debug_fd)
+        print(" where ",file=debug_fd)
+        print("args:",file=debug_fd)
+        pprint(args,fd=debug_fd)
+        print("kargs:",file=debug_fd)
+        k = 'Authorization'
+        h = kargs.get("auth",None)
+        if h is not None and type(h) == tuple:
+            hidden.add(h[1])
+        h = kargs.get('headers',None)
+        if h is not None:
+            auth = h.get(k, None)
             if auth is not None:
-                h[k] = auth
-            print("="*50,file=debug_fd)
-            print(file=debug_fd)
+                hidden.add(h[k])
+        else:
+            auth = None
+        pprint(kargs,fd=debug_fd)
+        if auth is not None:
+            h[k] = auth
+        print("="*50,file=debug_fd)
+        print(file=debug_fd)
     else:
         save = (mname, args, kargs)
 
