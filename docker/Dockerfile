@@ -3,7 +3,7 @@ USER root
 RUN dnf install -y curl findutils vim git which jq python3 python3-pip gcc gcc-c++ python3-devel sudo glibc-langpack-en otf2 ntpdate procps-ng
 
 # Set up jupyter
-RUN pip3 install jupyter requests numpy scipy matplotlib tzupdate email-validator gui_fun
+RUN pip3 install jupyter requests numpy scipy matplotlib tzupdate email-validator gui_fun termcolor
 
 WORKDIR /
 RUN git clone https://github.com/hdc-arizona/traveler-integrated
