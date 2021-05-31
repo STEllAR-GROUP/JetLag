@@ -6,6 +6,8 @@ from contextlib import redirect_stdout
 import pprint
 from datetime import datetime
 
+exceptions = requests.exceptions
+
 hidden = set()
 
 def pprint(obj,indent=0,fd=sys.stdout):

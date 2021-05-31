@@ -22,7 +22,7 @@ rostam["home_dir"]='/'
 uv = JetLag(auth,
   **rostam
 )
-if True:
+if False:
   uv = clone_machine(auth,
     name='rostam-sbrandt-exec-sbrandt',
     user="sbrandt",
@@ -30,13 +30,14 @@ if True:
     scratch_dir='/work/sbrandt',
     root_dir="/",
     home_dir="/home/sbrandt/root/home")
-print("Call configure...")
-uv.configure()
+  print("Call configure...")
+  uv.configure()
 
 j1 = uv.hello_world_job('fork')
 print("Job was submitted")
 j1.wait()
-assert j1.status() == "FINISHED"
+status = j1.status()
+assert status == "FINISHED", status
 err = j1.err_output()
 assert re.search(r'(?m)^This is stderr', err), err
 out = j1.std_output()

@@ -157,10 +157,10 @@ def link_filter(data):
 def key2(a):
     return int(1e6*a[1])
 
-def pause_():
+def pause():
     pass
 
-def pause():
+def pause_():
     global time_array
     home = os.environ['HOME']
     tmp_dir = os.path.join(home,"tmp","times")
@@ -1377,7 +1377,6 @@ class JetLag:
                     rc = int(g.group(1))
                     if rc != 0:
                         success = False
-                    self.set_meta(data)
                 elif m["status"] in job_done:
                     done = True
 
@@ -1396,6 +1395,7 @@ class JetLag:
                             for m in self.get_meta(k):
                                 self.del_meta(m)
 
+                if done:
                     headers = self.get_headers()
                     pause()
                     jdata = self.job_status(m["jobid"])
@@ -1463,8 +1463,10 @@ class JetLag:
         headers = self.get_headers()
         uuid = data['uuid']
         response = requests.delete(
-            self.fill('{apiurl}/meta/v2/data/')+uuid, headers=headers)
+            self.fill('{apiurl}/meta/v2/data/')+uuid, headers=headers, verify=False)
         check(response)
+        res = self.get_meta(data["name"])
+        assert len(res)==0, "Failed to delete uuid: %s" % uuid
 
     def set_meta(self, data):
         assert "name" in data
@@ -1805,8 +1807,6 @@ class RemoteJob:
                 c = get_status_color(n)
                 print(colored(n,c))
                 s = n
-            else:
-                print("  ",colored(n,c))
             sleep(poll_time)
             if n in job_done:
                 return
@@ -1948,6 +1948,16 @@ class Action:
         job = RemoteJob(jl, job_id)
         job.get_result()
 
+    def get_job_file(self):
+        if len(cmd_args) < 6:
+            print("get-job-filesrequires job-id fname")
+            exit(2)
+        job_id = cmd_args[4]
+        fname = cmd_args[5]
+        jl = JetLag(self.auth)
+        c = jl.get_file(job_id, fname)
+        print(c.decode())
+
     def job_diag(self):
         if len(cmd_args) < 5:
             print("job-diag requires job-id")
@@ -1994,6 +2004,23 @@ class Action:
         jetlag_id = cmd_args[4]
         jl = JetLag(self.auth, jetlag_id=jetlag_id)
         pp.pprint(jl.get_app_pems())
+
+    def get_meta(self):
+        if len(cmd_args) < 5:
+            print("get_meta requires name")
+        name = cmd_args[4]
+        jl = JetLag(self.auth)
+        #jl.del_meta(name)
+        print(jl.get_meta(name))
+
+    def del_meta(self):
+        if len(cmd_args) < 5:
+            print("get_meta requires name")
+        name = cmd_args[4]
+        jl = JetLag(self.auth)
+        m = jl.get_meta(name)
+        for k in m:
+            print(k,jl.del_meta(k))
 
     def mkdir(self):
         if len(cmd_args) < 6:
