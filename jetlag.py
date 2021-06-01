@@ -1850,7 +1850,12 @@ class RemoteJob:
             if os.path.exists(os.path.join(jobdir,'run_dir','result.py')):
                 with open(os.path.join(jobdir,'run_dir','result.py'),"r") as fd:
                     val = fd.read().strip()
-                    self.result = eval(val)
+                    try:
+                        self.result = eval(val)
+                    except TypeError as se:
+                        # This is triggered by incorrectly generated
+                        # Phylanx output.
+                        self.result = eval(re.sub(r'^list','',val))
             else:
               self.result = None
             return self.result
