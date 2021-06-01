@@ -40,7 +40,7 @@ def viz(job,verbose=False):
       import traceback
       traceback.print_exc()
 
-def remote_run(uv, fun, args, queue='fork', lim='00:05:00', nodes=0, ppn=0, script_name='helloworld'):
+def remote_run(uv, fun, args, queue='fork', lim='00:05:00', nodes=0, ppn=0, script_name='phylanx'):
     if hasattr(fun, "backend"):
         wfun = fun.backend.wrapped_function
     else:
