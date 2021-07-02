@@ -12,6 +12,7 @@ import sys
 from subprocess import Popen, PIPE
 from colored import colored
 import pprint
+from icecream import ic
 
 baseurl = None
 cmd_args = []
@@ -2073,7 +2074,17 @@ class Action:
 
 def usage():
     print("Usage: jetlag.py utype user action")
-    exit(2)
+    for a in dir(Action):
+        if re.match(r'^__.*__$', a):
+            pass
+        else:
+            f = getattr(Action, a)
+            if type(f) == type(Action.access):
+                print("   Action:",a,f.__code__.co_varnames[1:])
+                if hasattr(a, "__doc__"):
+                    if "Create a new string object from the given object" not in a.__doc__:
+                        print(a.__doc__)
+    raise Exception()
 
 def set_session(session, cmd_args):
     if "/.tapis/" in session:
@@ -2124,6 +2135,10 @@ if __name__ == "__main__":
                 requests.verify_ssl = v.stip().lower() not in ["no", "false"]
         else:
             cmd_args += [arg]
+    ic(cmd_args)
+    if len(cmd_args) < 2:
+        print("%s %s (tapis/agave) user ..." % (sys.executable, sys.argv[0]))
+        exit(2)
     if cmd_args[1] in ["tapis", "agave"]:
         pass
     else:
