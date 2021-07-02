@@ -12,7 +12,6 @@ import sys
 from subprocess import Popen, PIPE
 from colored import colored
 import pprint
-from icecream import ic
 
 baseurl = None
 cmd_args = []
@@ -1935,7 +1934,11 @@ class Action:
             jtype = "fork"
         job = jl.hello_world_job(jtype=jtype)
         job.wait()
-        print(job.get_result())
+        err = job.err_output()
+        assert re.search(r'(?m)^This is stderr', err), err
+        out = job.std_output()
+        assert re.search(r'(?m)^This is stdout', out), out
+        print("hello_world() test passed")
 
     def system_info(self):
         if len(cmd_args) < 5:
@@ -2135,10 +2138,8 @@ if __name__ == "__main__":
                 requests.verify_ssl = v.stip().lower() not in ["no", "false"]
         else:
             cmd_args += [arg]
-    ic(cmd_args)
     if len(cmd_args) < 2:
-        print("%s %s (tapis/agave) user ..." % (sys.executable, sys.argv[0]))
-        exit(2)
+        usage()
     if cmd_args[1] in ["tapis", "agave"]:
         pass
     else:
