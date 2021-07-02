@@ -1922,16 +1922,8 @@ class Action:
     def __init__(self, auth):
         self.auth = auth
 
-    def hello_world(self):
-        if len(cmd_args) < 5:
-            print("hello-world requires jetlag-id [fork/queue]")
-            exit(2)
-        jetlag_id = cmd_args[4]
+    def hello_world(self,jetlag_id,jtype="fork"):
         jl = JetLag(self.auth, jetlag_id=jetlag_id)
-        if len(cmd_args) == 6:
-            jtype = cmd_args[5]
-        else:
-            jtype = "fork"
         job = jl.hello_world_job(jtype=jtype)
         job.wait()
         err = job.err_output()
@@ -1940,47 +1932,26 @@ class Action:
         assert re.search(r'(?m)^This is stdout', out), out
         print("hello_world() test passed")
 
-    def system_info(self):
-        if len(cmd_args) < 5:
-            print("system-info requires system_name")
-            exit(2)
-        system_name = cmd_args[4]
+    def system_info(self,system_name):
         jl = JetLag(self.auth)
         pp.pprint(jl.get_system(system_name))
 
-    def get_job_files(self):
-        if len(cmd_args) < 5:
-            print("get-job-files requires job-id")
-            exit(2)
-        job_id = cmd_args[4]
+    def get_job_files(self,job_id):
         jl = JetLag(self.auth)
         job = RemoteJob(jl, job_id)
         job.get_result()
 
-    def get_job_file(self):
-        if len(cmd_args) < 6:
-            print("get-job-filesrequires job-id fname")
-            exit(2)
-        job_id = cmd_args[4]
-        fname = cmd_args[5]
+    def get_job_file(self,job_id,fname):
         jl = JetLag(self.auth)
         c = jl.get_file(job_id, fname)
         print(c.decode())
 
-    def job_diag(self):
-        if len(cmd_args) < 5:
-            print("job-diag requires job-id")
-            exit(2)
-        job_id = cmd_args[4]
+    def job_diag(self,job_id):
         jl = JetLag(self.auth)
         job = RemoteJob(jl, job_id)
         job.diag()
 
-    def job_list(self):
-        if len(cmd_args) < 5:
-            print("job-list requires num")
-            exit(2)
-        num = int(cmd_args[4])
+    def job_list(self,num):
         jl = JetLag(self.auth)
         records = []
         for job in jl.job_list(num):
@@ -1998,55 +1969,31 @@ class Action:
             secs = record[3]
             print(record[0],": ",colored(status,color)," ",dt," ",colored(ago(secs),"yellow"),sep='')
 
-    def access(self):
-        if len(cmd_args) < 7:
-           print("access requires jetlag-id user True/False")
-           exit(2)
-        assert cmd_args[6] in ["True", "False"]
-        jl = JetLag(self.auth, jetlag_id=cmd_args[4])
-        jl.access(cmd_args[5],cmd_args[6] == "True")
+    def access(self,jetlag_id,user,boolean):
+        assert boolean in ["True", "False"]
+        jl = JetLag(self.auth, jetlag_id)
+        jl.access(user,boolean == "True")
 
-    def get_app_pems(self):
-        if len(cmd_args) < 5:
-            print("get-apps-pems requires jetlag-id")
-            exit(2)
-        jetlag_id = cmd_args[4]
+    def get_app_pems(self,jetlag_id):
         jl = JetLag(self.auth, jetlag_id=jetlag_id)
         pp.pprint(jl.get_app_pems())
 
-    def get_meta(self):
-        if len(cmd_args) < 5:
-            print("get_meta requires name")
-        name = cmd_args[4]
+    def get_meta(self,name):
         jl = JetLag(self.auth)
         #jl.del_meta(name)
         print(jl.get_meta(name))
 
-    def del_meta(self):
-        if len(cmd_args) < 5:
-            print("get_meta requires name")
-        name = cmd_args[4]
+    def del_meta(self,name):
         jl = JetLag(self.auth)
         m = jl.get_meta(name)
         for k in m:
             print(k,jl.del_meta(k))
 
-    def mkdir(self):
-        if len(cmd_args) < 6:
-            print("mkdir requires jetlag-id dirname")
-            exit(2)
-        jetlag_id = cmd_args[4]
-        dir_name = cmd_args[5]
+    def mkdir(self,jetlag_id,dir_name):
         jl = JetLag(self.auth, jetlag_id=jetlag_id)
         jl.make_dir(dir_name)
 
-    def upload(self):
-        if len(cmd_args) < 7:
-            print("upload requires jetlag-id local remote")
-            exit(2)
-        jetlag_id = cmd_args[4]
-        local = cmd_args[5]
-        remote = cmd_args[6]
+    def upload(self,jetlag_id,local,remote):
         jl = JetLag(self.auth, jetlag_id=jetlag_id)
         with open(local, "r") as fd:
             jl.file_upload(os.path.dirname(remote), os.path.basename(remote), fd.read())
@@ -2071,22 +2018,29 @@ class Action:
                 pass
 
     def jetlag_ids(self):
+        """Provides a list of the defined jetlag ids"""
         jl = JetLag(self.auth)
         for jid in jl.jetlag_ids():
             print(jid)
 
 def usage():
     print("Usage: jetlag.py utype user action")
+    print("   utype: this should be 'tapis' or 'agave'")
     for a in dir(Action):
         if re.match(r'^__.*__$', a):
             pass
         else:
             f = getattr(Action, a)
             if type(f) == type(Action.access):
-                print("   Action:",a,f.__code__.co_varnames[1:])
-                if hasattr(a, "__doc__"):
-                    if "Create a new string object from the given object" not in a.__doc__:
-                        print(a.__doc__)
+                code = f.__code__
+                narg = code.co_argcount
+                args = code.co_varnames
+                print("   Action:",a,args[1:narg])
+                if hasattr(f, "__doc__"):
+                    d = getattr(f, "__doc__")
+                    if d is not None:
+                        if "Create a new string object from the given object" not in d:
+                            print("     ",colored(d,"yellow"))
     raise Exception()
 
 def set_session(session, cmd_args):
@@ -2158,7 +2112,7 @@ if __name__ == "__main__":
     else:
         method = None
     if hasattr(method, "__call__"):
-        method()
+        method(*cmd_args[4:])
     else:
         print("Valid actions are:")
         for a in dir(action):
