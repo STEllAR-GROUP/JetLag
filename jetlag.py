@@ -2044,6 +2044,7 @@ class Action:
         g = re.match(r'^(\w+)-(\w+)', name)
         machine_user = g.group(2)
         spec = clone_machine(self.auth, name=name, user=machine_user)
+        assert not os.path.exists("tmp.py"), "File tmp.py exists. Please delete it or move it out of the way."
         with open("tmp.py", "w") as fd:
             print("from jetlag import JetLag, Auth, set_verbose",file=fd)
             print("set_verbose(True)",file=fd)
@@ -2064,6 +2065,16 @@ class Action:
                 else:
                     print("    ",args[i],"=",d,e,sep='',file=fd)
             print("jlag.configure()",file=fd)
+            print('job = jlag.hello_world_job(jtype="queue")',file=fd)
+            print('job.wait()',file=fd)
+            print('err = job.err_output()',file=fd)
+            print('import re',file=fd)
+            print('assert re.search(r"(?m)^This is stderr", err), err',file=fd)
+            print('out = job.std_output()',file=fd)
+            print('assert re.search(r"(?m)^This is stdout", out), out',file=fd)
+            print('print("hello_world() test passed")',file=fd)
+            print("File 'tmp.py' created. Edit and run to configure or reconfigure.")
+
 
 def usage():
     print("Usage: jetlag.py utype user action")
