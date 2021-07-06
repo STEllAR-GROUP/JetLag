@@ -1206,7 +1206,7 @@ class JetLag:
             "name":job_name,
             "appId": "{fork_app_id}",
             "batchQueue": "{queue}",
-            "maxRunTime": "{max_run_time}",
+            "maxRunTime": str(run_time),
             "nodeCount": nodes,
             "processorsPerNode": ppn,
             "archive": False,
@@ -1723,6 +1723,7 @@ def clone_machine(auth, name, user, home_dir=None, root_dir=None, work_dir=None,
         raise Exception("bad type:"+str(arg))
     jlag = JetLag(auth)
     sysx = jlag.get_system(name)
+    #pp.pprint(sysx)
 
     if root_dir is None:
         root_dir = sysx["storage"]["rootDir"]
@@ -1730,7 +1731,7 @@ def clone_machine(auth, name, user, home_dir=None, root_dir=None, work_dir=None,
         root_dir = "/home/"+user+"/root"
 
     if home_dir is None:
-        home_dir = sysx["storage"]["rootDir"]
+        home_dir = sysx["storage"]["homeDir"]
     if home_dir is None:
         home_dir = os.path.join(root_dir,"home")
 
@@ -1757,6 +1758,7 @@ def clone_machine(auth, name, user, home_dir=None, root_dir=None, work_dir=None,
         "max_jobs_per_user":sysx["maxSystemJobsPerUser"],
         "max_jobs":sysx["maxSystemJobs"],
         "scheduler":sysx["scheduler"],
+        "custom_directives":sysx["queues"][0]["customDirectives"],
     
         "scratch_dir":scratch_dir,
         "work_dir":work_dir,
@@ -1765,9 +1767,9 @@ def clone_machine(auth, name, user, home_dir=None, root_dir=None, work_dir=None,
     }
     if allocation is not None:
         spec["allocation"] = allocation
-    if verbose:
-        pp.pprint(spec)
-    return JetLag(auth, **spec)
+    #if verbose:
+    #    pp.pprint(spec)
+    return spec #JetLag(auth, **spec)
 
 def mk_input(input_tgz):
     """
@@ -2009,19 +2011,59 @@ class Action:
                 print(system["id"])
 
     def cloneable_list(self):
+        global verbose
         jl = JetLag(self.auth)
+        n = 0
         for system in jl.systems_list():
             try:
+                vsave = verbose
+                verbose = False
                 clone_machine(self.auth, name=system["id"], user='xxx') 
-                print(colored("From:","cyan"),colored(system["id"],"green"))
+                n += 1
+                if (n % 3) == 0:
+                    print(colored(system["id"],"yellow"))
+                else:
+                    print(system["id"])
             except:
                 pass
+            finally:
+                verbose = vsave
 
     def jetlag_ids(self):
         """Provides a list of the defined jetlag ids"""
         jl = JetLag(self.auth)
         for jid in jl.jetlag_ids():
             print(jid)
+
+    def system_edit(self,name):
+        """Creates a file to edit a system"""
+        f = JetLag.__init__
+        code = f.__code__
+        narg = code.co_argcount
+        args = code.co_varnames
+        g = re.match(r'^(\w+)-(\w+)', name)
+        machine_user = g.group(2)
+        spec = clone_machine(self.auth, name=name, user=machine_user)
+        with open("tmp.py", "w") as fd:
+            print("from jetlag import JetLag, Auth, set_verbose",file=fd)
+            print("set_verbose(True)",file=fd)
+            print("auth = Auth('%s','%s')" % (self.auth.utype, self.auth.user),file=fd)
+            print("auth.create_or_refresh_token()",file=fd)
+            print("jlag = JetLag(auth,",file=fd)
+            for i in range(2,narg):
+                d = f.__defaults__[i-2]
+                name = args[i]
+                if name in spec:
+                    d = spec[name]
+                if i + 1 < narg:
+                    e = ','
+                else:
+                    e = ')'
+                if type(d) == str:
+                    print("    ",args[i],"='",d,"'",e,sep='',file=fd)
+                else:
+                    print("    ",args[i],"=",d,e,sep='',file=fd)
+            print("jlag.configure()",file=fd)
 
 def usage():
     print("Usage: jetlag.py utype user action")
