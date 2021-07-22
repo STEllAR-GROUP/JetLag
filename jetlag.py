@@ -157,10 +157,10 @@ def link_filter(data):
 def key2(a):
     return int(1e6*a[1])
 
-def pause():
+def pause_():
     pass
 
-def pause_():
+def pause():
     global time_array
     home = os.environ['HOME']
     tmp_dir = os.path.join(home,"tmp","times")
@@ -1564,6 +1564,10 @@ class JetLag:
         self.mk_app(force=True)
 
     def get_file(self,job_id,fname,as_file=None):
+
+        if isinstance(job_id, RemoteJob):
+            job_id = job_id.job_id
+
         if verbose:
             if as_file is not None:
                 print(colored("Getting file:","green"), fname,colored("as:","green"),as_file)
