@@ -2039,6 +2039,12 @@ class Action:
         for jid in jl.jetlag_ids():
             print(jid)
 
+    def job_output(self, job_id):
+        jl = JetLag(self.auth)
+        job = RemoteJob(jl, job_id)
+        print(job.std_output())
+        print(job.err_output())
+
     def system_edit(self,name):
         """Creates a file to edit a system"""
         f = JetLag.__init__
@@ -2176,5 +2182,5 @@ if __name__ == "__main__":
             item = getattr(action, a)
             if not re.match(r'^__', a) and hasattr(item, "__call__"):
                 print(" ",a)
-        print("Not a valid action: '%s'" % action_name)
+        print("Not a valid action: '%s'" % re.sub(r'_','-',action_name))
         usage()
