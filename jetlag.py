@@ -315,6 +315,9 @@ class Auth:
                 baseurl = "https://sandbox.agaveplatform.org"
             else:
                 baseurl = "https://api.tacc.utexas.edu"
+        else:
+            if not re.match(r'^https://', baseurl):
+                baseurl = "https://"+baseurl
         
         # Fill in the default tenant
         if tenant is None:
