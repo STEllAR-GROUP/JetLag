@@ -271,11 +271,12 @@ def get_auth_sessions():
         get_current(os.path.join(home, ".tapis"))
     agave_cache_dir = os.environ.get("AGAVE_CACHE_DIR",None)
     if agave_cache_dir is not None:
-        if not os.path.exists(os.path.join(agave_cache_dir, "/current")):
+        agave_cache_file = os.path.join(agave_cache_dir, "/current")
+        if not os.path.exists(agave_cache_file):
             print(f"Invalid setting for environment variable AGAVE_CACHE_DIR: '{agave_cache_dir}'")
             exit(2)
-        if agave_cache_dir not in names:
-            names += [agave_cache_dir]
+        if agave_cache_file not in names:
+            names += [agave_cache_file]
     return names
 
 def get_auth_by_session(name):
@@ -2129,7 +2130,7 @@ def usage():
     print("Usage: jetlag.py session action")
     print("   session: A substring which is contained exactly one session id.")
     print("   To list sessions: 'jetlag.py session-list")
-    print("   To create a session: 'jetlag.py session-create utype user baseurl tenant")
+    print("   To create a session: 'jetlag.py session-create utype user [baseurl [tenant]]")
     print("   utype is either 'agave' or 'tapis'")
     print(" Actions:")
     for a in dir(Action):
