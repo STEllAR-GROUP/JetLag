@@ -2130,6 +2130,7 @@ def usage():
     print("   session: A substring which is contained exactly one session id.")
     print("   To list sessions: 'jetlag.py session-list")
     print("   To create a session: 'jetlag.py session-create utype user baseurl tenant")
+    print("   utype is either 'agave' or 'tapis'")
     print(" Actions:")
     for a in dir(Action):
         if re.match(r'^__.*__$', a):
@@ -2170,6 +2171,8 @@ if __name__ == "__main__":
                 print(idstr)
         exit(0)
     if len(cmd_args) > 1 and cmd_args[1] in ["session-create","session_create"]:
+        if len(cmd_args) < 4:
+            usage()
         utype = cmd_args[2]
         uname = cmd_args[3]
         if len(cmd_args)==6:
