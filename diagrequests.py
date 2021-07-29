@@ -52,12 +52,26 @@ assert verify_ssl_env in ["yes", "no"], "VERIFY_SSL must be YES or NO"
 verify_ssl = verify_ssl_env == "yes"
 debug_fd = None
 
-if verify_ssl == False:
-    if "PYTHONWARNINGS" not in os.environ:
-        print("Disabling SSL Verification, consider setting env variable...")
-        print("export PYTHONWARNINGS='ignore:Unverified HTTPS request'")
-    else:
-        print("Disabling SSL Verification")
+warned_ssl_false = False
+
+def check_ssl():
+    global warned_ssl_false
+    if verify_ssl == False:
+        if warned_ssl_false:
+            return
+        warned_ssl_false = True
+        if "PYTHONWARNINGS" not in os.environ:
+            print("Disabling SSL Verification, consider setting env variable...")
+            print("export PYTHONWARNINGS='ignore:Unverified HTTPS request'")
+        else:
+            print("Disabling SSL Verification")
+
+check_ssl()
+
+def set_ssl(v):
+    global verify_ssl
+    verify_ssl = v
+    check_ssl()
 
 def all(mname, args, kargs, verbose=False):
     global save

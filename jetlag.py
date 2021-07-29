@@ -12,6 +12,15 @@ import sys
 from subprocess import Popen, PIPE
 from colored import colored
 import pprint
+from traceback import print_exc
+
+def here(*args):
+    import inspect
+    stack = inspect.stack()
+    frame = stack[1]
+    print("HERE: %s:%d" % (frame.filename, frame.lineno), *args, flush=True)
+    frame = None
+    stack = None
 
 baseurl = None
 cmd_args = []
@@ -157,10 +166,10 @@ def link_filter(data):
 def key2(a):
     return int(1e6*a[1])
 
-def pause_():
+def pause():
     pass
 
-def pause():
+def pause_():
     global time_array
     home = os.environ['HOME']
     tmp_dir = os.path.join(home,"tmp","times")
@@ -244,44 +253,60 @@ def get_current(fname):
         return ret
     return []
 
+def get_auth_by_fname(fname):
+    with open(fname,"r") as fd:
+        jdata = json.loads(fd.read())
+        if "/.tapis/" in fname:
+            ut = "tapis"
+        else:
+            ut = "agave"
+    if 'client' in jdata:
+        return Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"],client=jdata['client'])
+    else:
+        return Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"])
+
+def get_auth_sessions():
+    names = \
+        get_current(os.path.join(home, ".agave")) + \
+        get_current(os.path.join(home, ".tapis"))
+    agave_cache_dir = os.environ.get("AGAVE_CACHE_DIR",None)
+    if agave_cache_dir is not None:
+        if not os.path.exists(os.path.join(agave_cache_dir, "/current")):
+            print(f"Invalid setting for environment variable AGAVE_CACHE_DIR: '{agave_cache_dir}'")
+            exit(2)
+        if agave_cache_dir not in names:
+            names += [agave_cache_dir]
+    return names
+
+def get_auth_by_session(name):
+    sessions = get_auth_sessions()
+    auths = []
+    idstrs = []
+    for session in sessions:
+        a = get_auth_by_fname(session)
+        idstr = a.get_idstr()
+        idstrs += [idstr]
+        if name in idstr:
+            auths += [a]
+    if len(idstrs) == 0:
+        print("No sessions have been configured. Please try 'jetlag.py session-create'")
+        usage()
+    if len(auths) != 1:
+        print(f"Name '{name}' does not uniquely identify a session.")
+        print("Sessions are:")
+        for idstr in idstrs:
+            print(" ",idstr)
+        usage()
+
+    return auths[0]
+    
 class Auth:
     """
     The Universal (i.e. Tapis or Agave) authorization
     """
-    def __init__(self, utype, user=None, password=None, baseurl=None, tenant=None):
+    def __init__(self, utype, user=None, password=None, baseurl=None, tenant=None, client=None):
+        self.client = client
         self.is_valid = False
-        if utype not in ["tapis", "agave"]:
-            sessions = \
-                get_current(os.path.join(home, ".agave")) + \
-                get_current(os.path.join(home, ".tapis"))
-            jetpat = re.sub(r'@','.*@.*',utype)
-            session_list = []
-            for session in sessions:
-                with open(session, "r") as fd:
-                    jdata = json.loads(fd.read()) # yyz
-                    if "/.tapis/" in session:
-                        ut = "tapis"
-                    else:
-                        ut = "agave"
-                    a = Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"])
-                    if os.path.realpath(a.get_auth_file()) !=  os.path.realpath(session):
-                        continue
-                    jtext = a.get_sig()
-                    if re.search(jetpat, jtext):
-                        session_list += [session]
-            assert len(session_list)==1, "Pattern '%s' matched %d sessions" % (utype, len(session_list))
-            session = session_list[0]
-            if "/.tapis/" in session:
-                utype = 'tapis'
-            else:
-                utype = 'agave'
-            with open(session, "r") as fd:
-                jdata = json.loads(fd.read())
-            baseurl = jdata["baseurl"]
-            user = jdata["username"]
-            tenant = jdata["tenantid"]
-            requests.verify_ssl = jdata.get("verify_ssl",True)
-        utype = utype.strip().lower()
         assert utype in ['tapis', 'agave'], 'utype="%s"' % utype
 
         # Fill in the default baseurl
@@ -298,6 +323,7 @@ class Auth:
             else:
                 tenant = "tacc.prod"
 
+        self.client = client
         self.utype = utype
         self.user = user
         self.baseurl = baseurl
@@ -307,12 +333,17 @@ class Auth:
 
         self.auth_age = None
 
-    def get_sig(self):
-        return self.utype+"+"+self.tenant+":"+self.user+"@"+self.baseurl
+    def __repr__(self):
+        return self.get_idstr()
+
+    def get_idstr(self):
+        #idstr = self.utype+"+"+self.tenant+":"+self.user+"@"+self.baseurl
+        idstr = self.utype+":"+self.user+":"+re.sub(r'^https://','',self.baseurl)+":"+self.tenant
+        if self.client is not None:
+            idstr += ":"+self.client
+        return idstr
 
     def get_auth_file(self):
-        if "AGAVE_CACHE_DIR" in os.environ:
-            return os.path.join(os.environ["AGAVE_CACHE_DIR"], "current")
         burl = codeme("~".join([
             self.tenant,
             self.baseurl,
@@ -413,8 +444,7 @@ class Auth:
             if self.auth_data is not None and "verify_ssl" in self.auth_data:
                 if not self.auth_data["verify_ssl"]:
                     if verbose: 
-                        print("Setting VERIFY_SSL to False")
-                        requests.verify_ssl = False
+                        requests.set_ssl(False)
         if not os.path.exists(auth_file):
             return False 
         if age(auth_file) < 30*60:
@@ -2052,13 +2082,19 @@ class Action:
         narg = code.co_argcount
         args = code.co_varnames
         g = re.match(r'^(\w+)-(\w+)', name)
-        machine_user = g.group(2)
-        spec = clone_machine(self.auth, name=name, user=machine_user)
+        if g:
+            machine_user = g.group(2)
+        else:
+            machine_user = self.auth.user
+        if name.lower().strip() == "none":
+            spec = {}
+        else:
+            spec = clone_machine(self.auth, name=name, user=machine_user)
         assert not os.path.exists("tmp.py"), "File tmp.py exists. Please delete it or move it out of the way."
         with open("tmp.py", "w") as fd:
             print("from jetlag import JetLag, Auth, set_verbose",file=fd)
             print("set_verbose(True)",file=fd)
-            print("auth = Auth('%s','%s')" % (self.auth.utype, self.auth.user),file=fd)
+            print("auth = Auth('%s','%s',baseurl='%s',tenant='%s')" % (self.auth.utype, self.auth.user, self.auth.baseurl, self.auth.tenant),file=fd)
             print("auth.create_or_refresh_token()",file=fd)
             print("jlag = JetLag(auth,",file=fd)
             for i in range(2,narg):
@@ -2087,8 +2123,11 @@ class Action:
 
 
 def usage():
-    print("Usage: jetlag.py utype user action")
-    print("   utype: this should be 'tapis' or 'agave'")
+    print("Usage: jetlag.py session action")
+    print("   session: A substring which is contained exactly one session id.")
+    print("   To list sessions: 'jetlag.py session-list")
+    print("   To create a session: 'jetlag.py session-create utype user baseurl tenant")
+    print(" Actions:")
     for a in dir(Action):
         if re.match(r'^__.*__$', a):
             pass
@@ -2106,76 +2145,70 @@ def usage():
                             print("     ",colored(d,"yellow"))
     raise Exception()
 
-def set_session(session, cmd_args):
-    if "/.tapis/" in session:
-        utype = "tapis"
-    else:
-        utype = "agave"
-    with open(session, "r") as fd:
-        jdata = json.loads(fd.read())
-    if "verify_ssl" in jdata:
-        if not jdata["verify_ssl"]:
-            requests.verify_ssl = False
-            print("Setting VERIFY_SSL to False")
-    baseurl = jdata["baseurl"]
-    return baseurl, [cmd_args[0], utype, jdata["username"]]+cmd_args[2:]
-
 if __name__ == "__main__":
     home = os.environ["HOME"]
-    if len(sys.argv)==2 and sys.argv[1] == "sessions":
-        sessions = \
-            get_current(os.path.join(home, ".agave")) + \
-            get_current(os.path.join(home, ".tapis"))
-        n = 0
-        for session in sessions:
-            with open(session, "r") as fd:
-                jdata = json.loads(fd.read())
-                if "/.tapis/" in session:
-                    ut = "tapis"
-                else:
-                    ut = "agave"
-                a = Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"])
-                idstr = a.get_sig()
-                if os.path.realpath(a.get_auth_file()) != os.path.realpath(session):
-                    print("  Invalid:",session)
-                    continue
-                n += 1
-                if n == 3:
-                    print(colored(idstr,"cyan"))
-                else:
-                    print(idstr)
-        exit(0)
     for arg in sys.argv:
-        g = re.match(r'--(baseurl|verify-ssl)=(.*)', arg)
+        g = re.match(r'--(verify-ssl)=(.*)', arg)
         if g:
             k, v = g.group(1), g.group(2)
-            if k == "baseurl":
-                baseurl = v
-            elif k == "verify-ssl":
-                requests.verify_ssl = v.stip().lower() not in ["no", "false"]
+            if k == "verify-ssl":
+                requests.set_ssl(v.strip().lower() not in ["no", "false"])
         else:
             cmd_args += [arg]
+    if len(cmd_args)==2 and cmd_args[1] in ["sessions","session-list","session_list"]:
+        n = 0
+        for session in get_auth_sessions():
+            a = get_auth_by_fname(session)
+            idstr = a.get_idstr()
+            n += 1
+            if n == 3:
+                print(colored(idstr,"cyan"))
+            else:
+                print(idstr)
+        exit(0)
+    if len(cmd_args) > 1 and cmd_args[1] in ["session-create","session_create"]:
+        utype = cmd_args[2]
+        uname = cmd_args[3]
+        if len(cmd_args)==6:
+            baseurl = cmd_args[4]
+            if not re.match(r'^https://', baseurl):
+                baseurl = "https://"+baseurl
+            tenant = cmd_args[5]
+            jdata = json.loads(requests.get(baseurl+"/tenants/").content.decode())
+            tenant_is_good = False
+            tnames = []
+            for jresult in jdata["result"]:
+                tname = jresult["code"]
+                tnames += [tname]
+            tnames_str = "', '".join(tnames)
+            assert tenant in tnames, f"Invalid tenant: '{tenant}'. Valid names are: '{tnames_str}'"
+            a = Auth(utype, uname, baseurl=baseurl, tenant=tenant)
+        else:
+            a = Auth(utype, uname)
+        print(a)
+        print(a.get_auth_file())
+        a.create_or_refresh_token()
+        exit(0)
     if len(cmd_args) < 2:
+        print("Too few args")
         usage()
-    if cmd_args[1] in ["tapis", "agave"]:
-        pass
-    else:
-        # if the arg is not a utype it is a session
-        cmd_args = cmd_args[:2]+[""]+cmd_args[2:]
-    if len(cmd_args) < 4:
-        usage()
+    #cmd_args = cmd_args[:2]+[""]+cmd_args[2:]
+    #if len(cmd_args) < 4:
+        #usage()
     set_verbose(True)
-    auth = Auth(cmd_args[1], cmd_args[2], baseurl=baseurl)
+    auth = get_auth_by_session(cmd_args[1]) 
     auth.create_or_refresh_token()
     assert auth.is_valid
-    action_name = re.sub(r'-','_',cmd_args[3])
+    if len(cmd_args) <= 2:
+        usage()
+    action_name = re.sub(r'-','_',cmd_args[2])
     action = Action(auth)
     if hasattr(action, action_name):
         method = getattr(action, action_name)
     else:
         method = None
     if hasattr(method, "__call__"):
-        method(*cmd_args[4:])
+        method(*cmd_args[3:])
     else:
         print("Valid actions are:")
         for a in dir(action):
