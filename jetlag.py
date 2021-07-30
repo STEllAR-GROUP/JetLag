@@ -2130,11 +2130,10 @@ class Action:
 
 
 def usage():
-    print("Usage: jetlag.py session action")
-    print("   session: A substring which is contained exactly one session id.")
-    print("   To list sessions: 'jetlag.py session-list")
-    print("   To create a session: 'jetlag.py session-create utype user [baseurl [tenant]]")
-    print("   utype is either 'agave' or 'tapis'")
+    print("Usage: jetlag.py [--ssl-verify=(yes|no)] session action")
+    print("Usage: jetlag.py session-list")
+    print("Usage: jetlag.py session-create (tapis|agave) user [baseurl [tenant]]")
+    print("   'session': A substring which is contained exactly one session id.")
     print(" Actions:")
     for a in dir(Action):
         if re.match(r'^__.*__$', a):
@@ -2172,10 +2171,10 @@ if __name__ == "__main__":
             n += 1
             if n == 3:
                 print(colored(idstr,"cyan"))
-                print(" ",colored(auth_file,"green"))
+                print(colored("  file:","blue"),colored(auth_file,"green"))
             else:
                 print(idstr)
-                print(" ",colored(auth_file,"yellow"))
+                print(colored("  file:","blue"),colored(auth_file,"yellow"))
         exit(0)
     if len(cmd_args) > 1 and cmd_args[1] in ["session-create","session_create"]:
         if len(cmd_args) < 4:
