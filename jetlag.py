@@ -261,9 +261,12 @@ def get_auth_by_fname(fname):
         else:
             ut = "agave"
     if 'client' in jdata:
-        return Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"],client=jdata['client'])
+        a = Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"],client=jdata['client'])
     else:
-        return Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"])
+        a = Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"])
+    if a.get_auth_file() != fname:
+        raise Exception("Bad auth file:",fname)
+    return a
 
 def get_auth_sessions():
     names = \
@@ -2165,11 +2168,14 @@ if __name__ == "__main__":
         for session in get_auth_sessions():
             a = get_auth_by_fname(session)
             idstr = a.get_idstr()
+            auth_file = a.get_auth_file()
             n += 1
             if n == 3:
                 print(colored(idstr,"cyan"))
+                print(" ",colored(auth_file,"green"))
             else:
                 print(idstr)
+                print(" ",colored(auth_file,"yellow"))
         exit(0)
     if len(cmd_args) > 1 and cmd_args[1] in ["session-create","session_create"]:
         if len(cmd_args) < 4:
