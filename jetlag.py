@@ -1632,7 +1632,7 @@ class JetLag:
                     print(content,file=fd)
         return content
 
-    def fetch_job(self,jobid,dir='',recurse=True):
+    def job_file_list(self,jobid,dir='',recurse=True):
         if dir == "" and verbose:
             print(colored("Output for job: "+jobid,"magenta"))
 
@@ -1649,7 +1649,7 @@ class JetLag:
                 print(colored("File:","blue"),fname)
             if fdata["format"] == "folder":
                 if recurse:
-                    outs += self.fetch_job(jobid,fname,verbose)
+                    outs += self.job_file_list(jobid,fname,verbose)
                 continue
             else:
                 outs += [fname]
@@ -1882,7 +1882,7 @@ class RemoteJob:
                         print(colored("Could not get output.tgz","red"))
             out_file = os.path.join(jobdir,"job.out")
             err_file = os.path.join(jobdir,"job.err")
-            outs = self.jlag.fetch_job(self.job_id,recurse=False)
+            outs = self.jlag.job_file_list(self.job_id,recurse=False)
             for out in outs:
                 g = re.match(r'.*(?:\.(out|err))$',out)
                 if g:
@@ -2081,6 +2081,10 @@ class Action:
         job = RemoteJob(jl, job_id)
         print(job.std_output())
         print(job.err_output())
+
+    def job_file_list(self,job_id):
+        jl = JetLag(self.auth)
+        jl.job_file_list(job_id)
 
     def system_edit(self,name):
         """Creates a file to edit a system"""
