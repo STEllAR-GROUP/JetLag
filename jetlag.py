@@ -1984,10 +1984,16 @@ class Action:
         job = RemoteJob(jl, job_id)
         job.get_result()
 
-    def get_job_file(self,job_id,fname):
+    def get_job_file(self,job_id,fname,as_file=None):
         jl = JetLag(self.auth)
-        c = jl.get_file(job_id, fname)
-        print(c.decode())
+        if as_file is None:
+            c = jl.get_file(job_id, fname)
+            try:
+                print(c.decode())
+            except:
+                print(c)
+        else:
+            jl.get_file(job_id, fname, as_file)
 
     def job_diag(self,job_id):
         jl = JetLag(self.auth)
