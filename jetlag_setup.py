@@ -11,6 +11,7 @@ class Loader:
 
     def loadf(self, utype, user=None, password=None, baseurl=None, tenant=None):
         self.auth = Auth(utype, user, password, baseurl, tenant)
+        self.auth.create_or_refresh_token()
         self.jlag = JetLag(self.auth)
 
     def query_jetlag_id(self, jid):

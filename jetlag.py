@@ -1764,6 +1764,7 @@ def clone_machine(auth, name, user, home_dir=None, root_dir=None, work_dir=None,
         raise Exception("bad type:"+str(arg))
     jlag = JetLag(auth)
     sysx = jlag.get_system(name)
+    assert sysx is not None, f"Invalid name {name}"
     #pp.pprint(sysx)
 
     if root_dir is None:
