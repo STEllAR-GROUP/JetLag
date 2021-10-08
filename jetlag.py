@@ -2143,7 +2143,7 @@ class Action:
 def usage():
     print("Usage: jetlag.py [--ssl-verify=(yes|no)] session action")
     print("Usage: jetlag.py session-list")
-    print("Usage: jetlag.py session-create (tapis|agave) user [baseurl [tenant]]")
+    print("Usage: jetlag.py session-create (tapis|agave) user [baseurl tenant]")
     print("   'session': A substring which is contained exactly one session id.")
     print(" Actions:")
     for a in dir(Action):
@@ -2188,15 +2188,19 @@ if __name__ == "__main__":
                 print(colored("  file:","blue"),colored(auth_file,"yellow"))
         exit(0)
     if len(cmd_args) > 1 and cmd_args[1] in ["session-create","session_create"]:
-        if len(cmd_args) < 4:
+        if len(cmd_args) not in [4,6]:
             usage()
         utype = cmd_args[2]
         uname = cmd_args[3]
-        if len(cmd_args)==6:
+        print(colored("utype:","green"),utype)
+        print(colored("uname:","green"),uname)
+        if len(cmd_args)!=4:
             baseurl = cmd_args[4]
             if not re.match(r'^https://', baseurl):
                 baseurl = "https://"+baseurl
             tenant = cmd_args[5]
+            print(colored("baseurl:","green"), baseurl)
+            print(colored("tenant:","green"), tenant)
             jdata = json.loads(requests.get(baseurl+"/tenants/").content.decode())
             tenant_is_good = False
             tnames = []
