@@ -4,8 +4,6 @@ from dateutil import parser
 import datetime, time
 
 def auth(user,passw,tenant,baseurl):
-    print("Running AGAVE AUTH")
-
     cache=os.environ["HOME"]+"/.agave1"
     os.environ["AGAVE_CACHE_DIR"]=cache
     os.environ["AGAVE_TENANTS_API_BASEURL"] = baseurl
