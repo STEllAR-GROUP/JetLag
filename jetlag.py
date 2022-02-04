@@ -2237,6 +2237,7 @@ if __name__ == "__main__":
     if hasattr(method, "__call__"):
         method(*cmd_args[3:])
     else:
+        print("Attempted action was:",action_name)
         print("Valid actions are:")
         for a in dir(action):
             item = getattr(action, a)
