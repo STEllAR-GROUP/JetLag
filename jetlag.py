@@ -1,3 +1,7 @@
+from hosts import *
+from ser import ser, deser
+import sqlite3 as sq3
+from tempfile import NamedTemporaryFile
 from names import rand_name
 import hashlib, base64, re, os
 from random import randint
@@ -13,14 +17,10 @@ from subprocess import Popen, PIPE
 from colored import colored
 import pprint
 from traceback import print_exc
+from tasks import run_task, task_status
+from here import here
 
-def here(*args):
-    import inspect
-    stack = inspect.stack()
-    frame = stack[1]
-    print("HERE: %s:%d" % (frame.filename, frame.lineno), *args, flush=True)
-    frame = None
-    stack = None
+_here = os.path.realpath(".")
 
 baseurl = None
 cmd_args = []
@@ -50,6 +50,19 @@ def get_status_color(status):
 has_color = False
 
 now = time()
+
+def rm_auth(d):
+    if type(d) == dict:
+        r = {}
+        for k in d:
+            if k == "auth":
+                continue
+            r[k] = rm_auth(d[k])
+        return r
+    elif type(d) == list:
+        return [rm_auth(x) for x in d]
+    else:
+        return d
 
 verbose = False
 def set_verbose(v):
@@ -166,12 +179,12 @@ def link_filter(data):
 def key2(a):
     return int(1e6*a[1])
 
+home = os.environ['HOME']
+
 def pause():
     pass
-
-def pause_():
+def _pause():
     global time_array
-    home = os.environ['HOME']
     tmp_dir = os.path.join(home,"tmp","times")
     if len(time_array) == 0:
         os.makedirs(tmp_dir, exist_ok=True)
@@ -197,7 +210,9 @@ def pause_():
     delt = oldest_file + pause_time - now
     assert delt < pause_time
     if delt > 0:
+        print("sleep",delt,"...",end='',flush=True)
         sleep(delt)
+        print("done",flush=True)
     with open(time_array[0][0],"w") as fd:
         pass
     time_array[0][1] = os.path.getmtime(time_array[0][0])
@@ -242,36 +257,42 @@ def check(response):
             msg += response.content.decode()
         raise Exception(msg)
 
+default_agave = os.path.join(home,".agave","current")
 def get_current(fname):
+    ret = []
     if os.path.isdir(fname):
-        ret = []
         for f in os.listdir(fname):
             full = os.path.join(fname, f)
+            if full == default_agave:
+                continue
             if f == "current":
                 ret += [full]
             ret += get_current(full)
-        return ret
-    return []
+    return ret
 
 def get_auth_by_fname(fname):
     with open(fname,"r") as fd:
         jdata = json.loads(fd.read())
         if "/.tapis/" in fname:
             ut = "tapis"
-        else:
+        elif "/.agave/" in fname:
             ut = "agave"
+        else:
+            ut = "ssh"
     if 'client' in jdata:
         a = Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"],client=jdata['client'])
     else:
         a = Auth(utype=ut,user=jdata["username"],baseurl=jdata["baseurl"],tenant=jdata["tenantid"])
-    if a.get_auth_file() != fname:
-        raise Exception("Bad auth file:",fname)
+    afile = a.get_auth_file()
+    if afile != fname:
+        raise Exception("Bad auth file: %s != %s" % (afile, fname))
     return a
 
 def get_auth_sessions():
     names = \
         get_current(os.path.join(home, ".agave")) + \
-        get_current(os.path.join(home, ".tapis"))
+        get_current(os.path.join(home, ".tapis")) + \
+        get_current(os.path.join(home, ".sshcfg")) 
     agave_cache_dir = os.environ.get("AGAVE_CACHE_DIR",None)
     if agave_cache_dir is not None:
         agave_cache_file = os.path.join(agave_cache_dir, "/current")
@@ -311,15 +332,18 @@ class Auth:
     def __init__(self, utype, user=None, password=None, baseurl=None, tenant=None, client=None):
         self.client = client
         self.is_valid = False
-        assert utype in ['tapis', 'agave'], 'utype="%s"' % utype
+        assert '@' not in user
+        assert utype in ['tapis', 'agave', 'ssh'], 'utype="%s"' % utype
 
         # Fill in the default baseurl
         if baseurl is None:
             if utype == 'agave':
                 baseurl = "https://sandbox.agaveplatform.org"
+            elif utype == 'ssh':
+                baseurl = "ssh"
             else:
                 baseurl = "https://api.tacc.utexas.edu"
-        else:
+        elif tenant != "ssh":
             if not re.match(r'^https://', baseurl):
                 baseurl = "https://"+baseurl
         
@@ -327,6 +351,8 @@ class Auth:
         if tenant is None:
             if utype == 'agave':
                 tenant = "sandbox"
+            elif utype == 'ssh':
+                tenant = "ssh"
             else:
                 tenant = "tacc.prod"
 
@@ -357,9 +383,24 @@ class Auth:
             self.utype,
             self.user
         ]))
-        return os.path.join(os.environ["HOME"], "."+self.utype, self.user, burl, "current")
+        if self.utype == "ssh":
+            ut = ".sshcfg"
+        else:
+            ut = "."+self.utype
+        return os.path.join(home, ut, self.user, burl, "current")
 
     def create_or_refresh_token(self):
+        if self.utype == "ssh":
+            ssh_data = get_ssh_data()
+            host_data = ssh_data[self.baseurl]
+            if has_host_key(self.baseurl):
+                if "stricthostkeychecking" in host_data:
+                    set_ssh_data(self.baseurl, "stricthostkeychecking", None)
+            else:
+                if not "stricthostkeychecking" in host_data:
+                    set_ssh_data(self.baseurl, "stricthostkeychecking", "no")
+            self.is_valid = True
+            return
         auth_file = self.get_auth_file()
         if verbose:
             print(colored("Auth file:","green"), auth_file)
@@ -375,6 +416,10 @@ class Auth:
         return self.password
 
     def create_token(self):
+
+        if self.utype == "ssh":
+            self.is_valid = True
+            return
 
         auth = (
             self.user,
@@ -444,6 +489,9 @@ class Auth:
         This is under construction (i.e. it doesn't work).
         In principle, it can refresh an agave/tapis token.
         """
+        if self.utype == "ssh":
+            self.is_valid = True
+            return
 
         auth_file = self.get_auth_file()
         if self.auth_data is None:
@@ -647,6 +695,8 @@ class JetLag:
         self.app_version = "1.0.0"
         if self.utype == "tapis":
             self.jobs_dir = self.fill('tjob/{agave_user}')
+        elif self.utype == 'ssh':
+            self.jobs_dir = self.fill('sjob/{agave_user}')
         else:
             self.jobs_dir = self.fill('ajob/{agave_user}')
 
@@ -660,6 +710,35 @@ class JetLag:
             self.domain = exec_data["site"]
             self.port = exec_data["login"]["port"]
             self.queue = exec_data["queues"][0]["name"]
+
+    def ssh_job(self, job):
+        exec_txt = os.path.join(self.jetlag_dir(), "execution.txt")
+        with open(exec_txt,"r") as fd:
+            exec_data = json.loads(fd.read())
+        app_txt = os.path.join(self.jetlag_dir(), "app.txt")
+        with open(app_txt,"r") as fd:
+            app_data = json.loads(fd.read())
+
+
+        job_dir = os.path.join(exec_data["workDir"], job["name"])
+        self.make_dir(job_dir)
+
+        wrapper = os.path.join(app_data["deploymentPath"],app_data["templatePath"])
+        tfile = NamedTemporaryFile()
+        with open(tfile.name, "w") as fd:
+            print(f"cp {wrapper} {job_dir}/job-run.sh",file=fd)
+            print(f"cd {job_dir}",file=fd)
+            print(f"exec > job.out 2>job.err",file=fd)
+            jobpars = job["parameters"]
+            for par in jobpars:
+                parval = jobpars[par]
+                print(f"perl -p -i -e 's/\${{{par}}}/{parval}/g' job-run.sh",file=fd)
+            print(f"bash {job_dir}/job-run.sh",file=fd)
+        with open(tfile.name, "r") as fd:
+            c = fd.read()
+        self.make_dir(job_dir)
+        self.file_upload(job_dir,"job-exec.sh",c)
+        return str(self.ssh_cmd_thread(["bash",f"{job_dir}/job-exec.sh"]))
 
     def fill(self, obj):
         if obj is None:
@@ -763,6 +842,9 @@ class JetLag:
                 "publicAppsDir" : "{home_dir}/apps"
             }
         })
+        if self.is_ssh():
+            self.store_data(storage, "storage.txt")
+            return
 
         if not force:
             headers = self.get_headers()
@@ -825,6 +907,9 @@ class JetLag:
                 "auth" : self.auth
             }
         })
+        if self.is_ssh():
+            self.store_data(execm, "execution.txt")
+            return
 
         forkm = copy(execm)
         forkm["id"] = self.forkm_id
@@ -1122,6 +1207,11 @@ class JetLag:
 
         self.file_upload('{deployment_path}',wrapper_file, wrapper)
         self.file_upload('{deployment_path}',test_file,wrapper_file)
+        if self.is_ssh():
+            assert app_id is not None
+            app["id"] = app_id
+            self.store_data(app, "app.txt")
+            return
 
         if verbose:
             print(colored("Make Queue App:","green"),app["name"])
@@ -1143,6 +1233,9 @@ class JetLag:
         """
         Create a directory relative to the home dir on the remote machine.
         """
+        if self.is_ssh():
+            self.ssh_cmd(["mkdir","-p",dir_name])
+            return
         dir_name = self.fill(dir_name)
         if verbose:
             print(colored("Making Directory:","green"), dir_name)
@@ -1161,8 +1254,25 @@ class JetLag:
         dir_name = self.fill(dir_name)
         file_name = self.fill(file_name)
         if verbose:
-            print(colored("Uploading file:","green"),file_name,colored("to:","green"),dir_name)
-        file_contents = self.fill(file_contents)
+            if dir_name == "":
+                dest = "."
+            else:
+                dest = dir_name
+            print(colored("Uploading file:","green"),file_name,colored("to:","green"),dest)
+        #file_contents = self.fill(file_contents)
+
+        if self.is_ssh():
+            if file_contents is None:
+                self.scp_cmd([file_name,self.get_machine()+":"+dest+"/"+file_name])
+            else:
+                tfile  = NamedTemporaryFile()
+                with open(tfile.name, "w") as fw:
+                    fw.write(file_contents)
+                if dest != ".":
+                    self.ssh_cmd(["mkdir","-p",dest])
+                self.scp_cmd([tfile.name,self.get_machine()+":"+dest+"/"+file_name])
+            return
+
         if file_contents is None:
             with open(file_name, "rb") as fd:
                 file_contents = fd.read()
@@ -1303,11 +1413,16 @@ class JetLag:
         if ready:
             data = json.dumps(job)
             headers = self.get_headers(data)
-            pause()
-            response = requests.post(self.fill('{apiurl}/jobs/v2/'), headers=headers, data=data)
-            check(response)
-            rdata = response.json()
-            job_id = rdata["result"]["id"]
+            if self.is_ssh():
+                job_id = self.ssh_job(job)
+                # yyy
+                here("CALLING SET-META WITH JOB")
+                self.set_meta("jobid-"+job_id,job)
+            else:
+                response = requests.post(self.fill('{apiurl}/jobs/v2/'), headers=headers, data=data)
+                check(response)
+                rdata = response.json()
+                job_id = rdata["result"]["id"]
     
             if verbose:
                 print(colored("Job ID:","green"), job_id)
@@ -1337,17 +1452,6 @@ class JetLag:
             self.set_meta(meta)
             return RemoteJob(self, job_name=job_name)
 
-    def job_status(self, job_id):
-        headers = self.get_headers()
-        # Rion says this is a db lookup, so no pause is needed here
-        # pause()
-        response = requests.get(self.fill("{apiurl}/jobs/v2/")+job_id, headers=headers)
-        if response.status_code == 404:
-            return None
-        check(response)
-        jdata = response.json()["result"]
-        return jdata
-
     def apps_list(self):
         headers = self.get_headers()
         response = requests.get(self.fill("{apiurl}/apps/v2/"), headers=headers)
@@ -1356,6 +1460,16 @@ class JetLag:
         return jdata
 
     def jetlag_ids(self):
+        if self.is_ssh():
+            ids = []
+            exec_dir = os.path.join(home, ".sshcfg", "execution")
+            for m in os.listdir(exec_dir):
+                full = os.path.join(exec_dir, m, "execution.txt")
+                with open(full, "r") as fd:
+                    jdata = json.loads(fd.read())
+                    mid = re.sub('-exec-','-',jdata['id'])
+                    ids += [mid]
+            return ids
         execms = {}
         storms = {}
         forkms = {}
@@ -1497,17 +1611,32 @@ class JetLag:
                     self.set_meta(data)
 
     def del_meta(self, data):
+        if self.is_ssh():
+            db = self.get_db()
+            db.execute("delete from meta where uuid = %d" % data["uuid"])
+            db.execute("commit");
+            return
         headers = self.get_headers()
         uuid = data['uuid']
         response = requests.delete(
             self.fill('{apiurl}/meta/v2/data/')+uuid, headers=headers, verify=False)
         check(response)
         res = self.get_meta(data["name"])
-        assert len(res)==0, "Failed to delete uuid: %s" % uuid
+        # assert len(res)==0, "Failed to delete uuid: %s" % uuid
 
     def set_meta(self, data):
         assert "name" in data
         assert "value" in data
+        assert "'" not in data["name"]
+        if self.is_ssh():
+            db = self.get_db()
+            for row in self.get_meta(data["name"]):
+                self.del_meta(row)
+            sqlstmt = "insert into meta (name,value) values ('%s','%s')" % (data["name"], ser(data["value"]))
+            db.execute(sqlstmt)
+            db.execute('commit;')
+            return
+
         n = len(data.keys())
         assert n >= 2 and n <= 3
 
@@ -1534,7 +1663,30 @@ class JetLag:
                 continue
             self.del_meta(m)
 
+    def get_db(self):
+        db_dir = os.path.join(home, ".sqlcfg", self.agave_auth.user)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir,exist_ok=True)
+        db_file = os.path.join(db_dir, "sqlite.db")
+        db_exists = os.path.exists(db_file)
+        db = sq3.connect(db_file)
+        if not db_exists:
+            db.execute("create table meta (name text, value text, uuid integer primary key autoincrement)")
+        return db.cursor()
+
     def get_meta(self, name):
+        if self.is_ssh():
+            db = self.get_db()
+            sqlstmt = "select name, value, uuid from meta where name like '%s'" % name
+            result = []
+            for row in db.execute(sqlstmt):
+                a = 3
+                result += [{
+                    "name" : row[0],
+                    "value": deser(row[1]),
+                    "uuid" : row[2]
+                    }]
+            return result
         headers = self.get_headers()
         
         params = (
@@ -1556,6 +1708,13 @@ class JetLag:
         return result2
 
     def get_system(self,name):
+        if self.is_ssh():
+            name = self.fill(name)
+            ddir = os.path.join(home, ".sshcfg", "id", name)
+            for p in os.listdir(ddir):
+                with open(os.path.join(ddir, p),"r") as fd:
+                    return json.loads(fd.read())
+            return {}
         sname = self.fill(name)
         if verbose:
             print(colored("System:","green"),sname)
@@ -1583,6 +1742,1077 @@ class JetLag:
         return jdata
 
     def job_status(self, job_id):
+        if self.is_ssh():
+            # yyy
+            ret = task_status(job_id)
+            job_data = self.get_meta("jobid-"+job_id)
+            pp.pprint(job_data)
+            here("EXIT")
+            exit(0)
+            if ret is None:
+                jkey = 'jobdata-'+job_id
+                for meta in self.get_meta(jkey):
+                  ret = task_status(meta["value"]["job_id"])
+                  break
+            return ret
+
+        headers = self.get_headers()
+        response = requests.get(self.fill("{apiurl}/jobs/v2/")+job_id, headers=headers)
+        if response.status_code == 404:
+            return None
+        check(response)
+        jdata = response.json()["result"]
+        return jdata
+
+    def configure(self):
+        """
+        Completely configure the univeral system
+        starting from ssh keys.
+        """
+        self.mk_storage(force=True)
+        self.mk_execution(force=True)
+        self.mk_app(force=True)
+
+    def fill(self, obj):
+        if obj is None:
+            return obj
+        elif type(obj) == str:
+            s = ''
+            pos = 0
+            for p in re.finditer(r'(\$?){(\w+)}', obj):
+                s += obj[pos:p.start()]
+                if p.group(1) == '$':
+                    s += p.group(0)
+                else:
+                    s += str(getattr(self, p.group(2)))
+                pos = p.end()
+            if pos == 0:
+                return obj
+            else:
+                return s + obj[pos:]
+        elif type(obj) == list:
+            li = []
+            for item in obj:
+                li += [self.fill(item)]
+            return li
+        elif type(obj) == dict:
+            di = {}
+            for key in obj:
+                di[key] = self.fill(obj[key])
+            return di
+        else:
+            return obj
+
+    def get_headers(self,data=None):
+        """
+        We need basically the same auth headers for
+        everything we do. Factor out their initialization
+        to a common place.
+        """
+        self.agave_auth.refresh_token()
+        self.access_token = self.agave_auth.get_auth_data()["access_token"]
+        headers = {
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate',
+            'Authorization': self.fill('Bearer {access_token}'),
+            'Connection': 'keep-alive',
+            'User-Agent': 'python-requests/2.22.0',
+        }
+        if data is not None:
+            assert type(data) == str
+            headers['Content-Type'] = 'application/json'
+            headers['Content-Length'] = str(len(data))
+        return headers
+
+    def check_machine(self,machine):
+        """
+        Checks that we can do a files list on the machine.
+        This proves (or disproves) that we have auth working.
+        """
+        if verbose:
+            print(colored("Checking we can list files from machine:","green"),machine)
+        headers = self.get_headers()
+        params = (('limit','5'),('offset','0'),)
+        url = self.fill('{apiurl}/files/v2/listings/system/'+machine+'/')
+        pause()
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 404:
+            if verbose:
+                print(colored("Received 404 from URL","red"),url)
+            return False
+        check(response)
+        file_data = response.json()["result"]
+        n = 0
+        for file in file_data:
+            if verbose:
+                print(colored("File:","blue"),file["name"])
+            n += 1
+        assert n > 0
+        return True
+    
+    def mk_storage(self,force=False):
+
+        storage_id = self.storage_id
+
+        if verbose:
+            print(colored("Creating Storage Machine:","green"),storage_id)
+
+        port = int(self.port)
+
+        storage = self.fill({
+            "id" : storage_id,
+            "name" : "{machine} storage ({machine_user})",
+            "description" : "The {machine} computer",
+            "site" : "{domain}",
+            "type" : "STORAGE",
+            "storage" : {
+                "host" : "{machine}.{domain}",
+                "port" : port,
+                "protocol" : "SFTP",
+                "rootDir" : "{root_dir}",
+                "homeDir" : "{home_dir}",
+                "auth" : self.auth,
+                "publicAppsDir" : "{home_dir}/apps"
+            }
+        })
+        if self.is_ssh():
+            self.store_data(storage, "storage.txt")
+            return
+
+        if not force:
+            headers = self.get_headers()
+            response = requests.get(
+                self.fill('{apiurl}/systems/v2/{storage_id}'), headers=headers)
+            print(self.fill('{apiurl}/systems/v2/{storage_id}'))
+            check(response)
+
+        if (force or not self.check_machine(storage_id)):
+            json_storage = json.dumps(storage)
+            headers = self.get_headers(json_storage)
+            response = requests.post(
+                self.fill('{apiurl}/systems/v2/'), headers=headers, data=json_storage)
+            check(response)
+            assert self.check_machine(storage_id)
+
+    def mk_execution(self,force=False):
+
+        if verbose:
+            print(colored("Creating Execution Machine:","green"),self.execm_id)
+
+        execm = self.fill({
+            "id" : self.execm_id,
+            "name" : "{machine} exec ({machine_user})",
+            "description" : "The {machine} execution computer",
+            "site" : "{domain}",
+            "public" : False,
+            "status" : "UP",
+            "type" : "EXECUTION",
+            "executionType": "HPC",
+            "scheduler" : "{scheduler}",
+            "environment" : None,
+            "scratchDir" : "{scratch_dir}",
+            "workDir" : "{work_dir}",
+            "login" : {
+                "auth" : self.auth,
+                "host" : "{machine}.{domain}",
+                "port" : self.port,
+                "protocol" : "SSH"
+            },
+            "maxSystemJobs" : "{max_jobs}",
+            "maxSystemJobsPerUser" : "{max_jobs_per_user}",
+            "queues" : [
+              {
+                "name" : "{queue}",
+                "default" : True,
+                "maxJobs" : "{max_jobs}",
+                "maxNodes" : "{max_nodes}",
+                "maxProcessorsPerNode" : "{max_procs_per_node}",
+                "minProcessorsPerNode" : "{min_procs_per_node}",
+                "maxRequestedTime" : "{max_run_time}"
+              }
+            ],
+            "storage" : {
+                "host" : "{machine}.{domain}",
+                "port" : self.port,
+                "protocol" : "SFTP",
+                "rootDir" : "{root_dir}",
+                "homeDir" : "{home_dir}",
+                "auth" : self.auth
+            }
+        })
+        if self.is_ssh():
+            self.store_data(execm, "execution.txt")
+            return
+
+        forkm = copy(execm)
+        forkm["id"] = self.forkm_id
+        forkm["scheduler"] = "FORK"
+        forkm["executionType"] = "CLI"
+
+        if self.custom_directives is not None:
+            for q in execm["queues"]:
+                q["customDirectives"] = self.fill(self.custom_directives)
+
+        assert execm["scheduler"] != "FORK"
+
+        # EXEC
+        if not force:
+            headers = self.get_headers()
+            response = requests.get(
+                self.fill('{apiurl}/systems/v2/{execm_id}'), headers=headers)
+            print(self.fill('{apiurl}/systems/v2/{execm_id}'))
+            check(response)
+
+        if force or not self.check_machine(self.exec_id):
+            json_execm = json.dumps(execm)
+            headers = self.get_headers(json_execm)
+            response = requests.post(
+                self.fill('{apiurl}/systems/v2/'), headers=headers, data=json_execm)
+            check(response)
+            assert self.check_machine(self.execm_id)
+
+        # FORK
+        if not force:
+            headers = self.get_headers()
+            response = requests.get(
+                self.fill('{apiurl}/systems/v2/{forkm_id}'), headers=headers)
+            print(self.fill('{apiurl}/systems/v2/{forkm_id}'))
+            check(response)
+
+        if force or not self.check_machine(self.forkm_id):
+            json_forkm = json.dumps(forkm)
+            headers = self.get_headers(json_forkm)
+            response = requests.post(
+                self.fill('{apiurl}/systems/v2/'), headers=headers, data=json_forkm)
+            check(response)
+            assert self.check_machine(self.forkm_id)
+
+    def mk_app(self,force=True):
+
+        wrapper = """#!/bin/bash
+        export AGAVE_JOB_NODE_COUNT=${AGAVE_JOB_NODE_COUNT}
+        export AGAVE_JOB_PROCESSORS_PER_NODE=${AGAVE_JOB_PROCESSORS_PER_NODE}
+        export nx=${nx}
+        export ny=${ny}
+        export nz=${nz}
+        sh -c "${HOME}/exe/${script_name}.sh" """
+
+        app_name = self.app_name
+        app_version = self.app_version
+        wrapper_file = app_name + "-wrapper.txt"
+        test_file = app_name + "-test.txt"
+
+        app_id = self.app_id
+        app = self.fill({
+            "name" : app_name,
+            "version" : app_version,
+            "label" : app_name,
+            "shortDescription" : app_name,
+            "longDescription" : app_name,
+            "deploymentSystem" : "{storage_id}",
+            "deploymentPath" : "{deployment_path}",
+            "templatePath" : wrapper_file,
+            "testPath" : test_file,
+            "executionSystem" : "{execm_id}",
+            "executionType" : "HPC",
+            "parallelism" : "PARALLEL",
+            "allocation": "{allocation}",
+            "modules":[],
+            "inputs":[
+                {   
+                    "id":"input tarball",
+                    "details":{  
+                        "label":"input tarball",
+                        "description":"",
+                        "argument":None,
+                        "showArgument":False
+                    },
+                    "value":{  
+                        "default":"",
+                        "order":0,
+                        "required":False,
+                        "validator":"",
+                        "visible":True
+                    }
+                }   
+            ],
+            "parameters":[
+                {
+                  "id": "simagename",
+                  "value": {
+                    "visible": True,
+                    "required": False,
+                    "type": "string",
+                    "order": 0,
+                    "enquote": False,
+                    "default": "ubuntu",
+                    "validator": None
+                  },
+                  "details": {
+                    "label": "Singularity Image",
+                    "description": "The Singularity image to run: swan, funwave",
+                    "argument": None,
+                    "showArgument": False,
+                    "repeatArgument": False
+                  },
+                  "semantics": {
+                    "minCardinality": 0,
+                    "maxCardinality": 1,
+                    "ontology": []
+                  }
+                },
+                {
+                  "id": "needs_props",
+                  "value": {
+                    "visible": True,
+                    "required": False,
+                    "type": "string",
+                    "order": 0,
+                    "enquote": False,
+                    "default": "ubuntu",
+                    "validator": None
+                  },
+                  "details": {
+                    "label": "Needs Properties",
+                    "description": "Properties needed before the job runs",
+                    "argument": None,
+                    "showArgument": False,
+                    "repeatArgument": False
+                  },
+                  "semantics": {
+                    "minCardinality": 0,
+                    "maxCardinality": 1,
+                    "ontology": []
+                  }
+                },
+                {
+                  "id": "sets_props",
+                  "value": {
+                    "visible": True,
+                    "required": False,
+                    "type": "string",
+                    "order": 0,
+                    "enquote": False,
+                    "default": "ubuntu",
+                    "validator": None
+                  },
+                  "details": {
+                    "label": "Sets Properties",
+                    "description": "Properties set after the job runs",
+                    "argument": None,
+                    "showArgument": False,
+                    "repeatArgument": False
+                  },
+                  "semantics": {
+                    "minCardinality": 0,
+                    "maxCardinality": 1,
+                    "ontology": []
+                  }
+                },
+                {
+                  "id": "nx",
+                  "value": {
+                    "visible": True,
+                    "required": False,
+                    "type": "number",
+                    "order": 0,
+                    "enquote": False,
+                    "default": 0,
+                    "validator": None
+                  },
+                  "details": {
+                    "label": "NX",
+                    "description": "Processors in the X direction",
+                    "argument": None,
+                    "showArgument": False,
+                    "repeatArgument": False
+                  },
+                  "semantics": {
+                    "minCardinality": 0,
+                    "maxCardinality": 1,
+                    "ontology": []
+                  }
+                },
+                {
+                  "id": "ny",
+                  "value": {
+                    "visible": True,
+                    "required": False,
+                    "type": "number",
+                    "order": 0,
+                    "enquote": False,
+                    "default": 0,
+                    "validator": None
+                  },
+                  "details": {
+                    "label": "NY",
+                    "description": "Processors in the Y direction",
+                    "argument": None,
+                    "showArgument": False,
+                    "repeatArgument": False
+                  },
+                  "semantics": {
+                    "minCardinality": 0,
+                    "maxCardinality": 1,
+                    "ontology": []
+                  }
+                },
+                {
+                  "id": "nz",
+                  "value": {
+                    "visible": True,
+                    "required": False,
+                    "type": "number",
+                    "order": 0,
+                    "enquote": False,
+                    "default": 0,
+                    "validator": None
+                  },
+                  "details": {
+                    "label": "NZ",
+                    "description": "Processors in the Z direction",
+                    "argument": None,
+                    "showArgument": False,
+                    "repeatArgument": False
+                  },
+                  "semantics": {
+                    "minCardinality": 0,
+                    "maxCardinality": 1,
+                    "ontology": []
+                  }
+                },
+                {
+                  "id": "script_name",
+                  "value": {
+                    "visible": True,
+                    "required": False,
+                    "type": "string",
+                    "order": 0,
+                    "enquote": False,
+                    "default": "hello",
+                    "validator": r"^\S+$"
+                  },
+                  "details": {
+                    "label": "script_name",
+                    "description": "Script to run from ~/exe",
+                    "argument": None,
+                    "showArgument": False,
+                    "repeatArgument": False
+                  },
+                  "semantics": {
+                    "minCardinality": 1,
+                    "maxCardinality": 1,
+                    "ontology": []
+                  }
+                }
+            ],
+            "outputs":[  
+                {  
+                    "id":"Output",
+                    "details":{  
+                        "description":"The output",
+                        "label":"tables"
+                    },
+                    "value":{  
+                        "default":"output.tgz",
+                        "validator": None
+                    }
+                }
+            ]
+        })
+
+        forkm_id = self.forkm_id
+        fork_app_name = self.fork_app_name
+
+        fork_app_id = self.fork_app_id
+        forkapp = copy(app)
+        forkapp["name"] = fork_app_name
+        forkapp["executionSystem"] = forkm_id
+        forkapp["executionType"] = "CLI"
+
+        app = self.fill(app)
+        forkapp = self.fill(forkapp)
+
+        self.make_dir('{deployment_path}')
+        self.make_dir(self.jobs_dir)
+
+        home_dir = self.home_dir
+
+        self.file_upload('{deployment_path}',wrapper_file, wrapper)
+        self.file_upload('{deployment_path}',test_file,wrapper_file)
+        if self.is_ssh():
+            assert app_id is not None
+            app["id"] = app_id
+            self.store_data(app, "app.txt")
+            return
+
+        if verbose:
+            print(colored("Make Queue App:","green"),app["name"])
+        data = json.dumps(app)
+        headers = self.get_headers(data)
+        with open("json.txt", "w") as ff:
+            print(data, file=ff)
+        response = requests.post(self.fill('{apiurl}/apps/v2/'), headers=headers, data=data)
+        check(response)
+
+        if verbose:
+            print(colored("Make Fork App:","green"),forkapp["name"])
+        data = json.dumps(forkapp)
+        headers = self.get_headers(data)
+        response = requests.post(self.fill('{apiurl}/apps/v2/'), headers=headers, data=data)
+        check(response)
+
+    def make_dir(self, dir_name):
+        """
+        Create a directory relative to the home dir on the remote machine.
+        """
+        assert not re.match(r'^agave:',dir_name)
+        if self.is_ssh():
+            self.ssh_cmd(["mkdir","-p",dir_name])
+            return
+        dir_name = self.fill(dir_name)
+        if verbose:
+            print(colored("Making Directory:","green"), dir_name)
+        data = self.fill(json.dumps({"action": "mkdir", "path": dir_name}))
+        headers = self.get_headers(data)
+        pause()
+        response = requests.put(
+            self.fill('{apiurl}/files/v2/media/system/{storage_id}/'), headers=headers, data=data)
+        check(response)
+
+    def file_upload(self, dir_name, file_name, file_contents=None):
+        """
+        Upload a file to a directory. The variable dir_name is relative
+        to the home directory.
+        """
+        dir_name = self.fill(dir_name)
+        file_name = self.fill(file_name)
+        if verbose:
+            if dir_name == "":
+                dest = "."
+            else:
+                dest = dir_name
+            print(colored("Uploading file:","green"),file_name,colored("to:","green"),dest)
+        #file_contents = self.fill(file_contents)
+
+        if self.is_ssh():
+            if file_contents is None:
+                self.scp_cmd([file_name,self.get_machine()+":"+dest+"/"+file_name])
+            else:
+                tfile  = NamedTemporaryFile()
+                with open(tfile.name, "w") as fw:
+                    fw.write(file_contents)
+                if dest != ".":
+                    self.ssh_cmd(["mkdir","-p",dest])
+                self.scp_cmd([tfile.name,self.get_machine()+":"+dest+"/"+file_name])
+            return
+
+        if file_contents is None:
+            with open(file_name, "rb") as fd:
+                file_contents = fd.read()
+        headers = self.get_headers()
+        files = self.fill({
+            'fileToUpload': (file_name, file_contents)
+        })
+        url = self.fill('{apiurl}/files/v2/media/system/{storage_id}/'+dir_name)
+        pause()
+        response = requests.post(url, headers=headers, files=files)
+        check(response)
+
+    def hello_world_job(self, jtype='fork',sets_props={},needs_props={}, sleep_time=1):
+        """
+        Create and send a "Hello World" job to make
+        sure that the system is working.
+        """
+        input_tgz = {}
+
+        return self.run_job('hello-world', input_tgz, jtype=jtype, run_time="00:01:00", sets_props=sets_props, needs_props=needs_props)
+
+    def run_job(self, job_name, input_tgz=None, jtype='fork', nodes=0, ppn=0, run_time=None, sets_props={}, needs_props={}, nx=0, ny=0, nz=0, script_name='helloworld'):
+        """
+        Run a job. It must have a name and an input tarball. It will default
+        to running in a queue, but fork can also be requested. Specifying
+        the run-time is a good idea, but not required.
+        """
+        if ppn == 0:
+            ppn = int(self.fill("{max_procs_per_node}"))
+        if nodes == 0:
+            nodes = ceil(nx*ny*nz/ppn)
+
+        if nx != 0 or ny != 0 or nz != 0:
+            assert nx != 0 and ny != 0 and nz != 0
+            assert nx*ny*nz <= ppn*nodes
+
+        if nodes == 0:
+            nodes = 1
+
+        max_ppn = int(self.fill("{max_procs_per_node}"))
+        assert ppn <= max_ppn, '%d <= %d' % (ppn, max_ppn)
+        assert ppn >= 1
+        assert nodes >= 1
+
+        for k in sets_props:
+            for m in self.get_meta(k):
+                print("Property '%s' is already set" % k)
+                return None
+
+        self.agave_auth.refresh_token()
+
+        if input_tgz is not None:
+            mk_input(input_tgz)
+
+        if run_time is None:
+            run_time = self.max_run_time
+
+        digits = 10
+        max_val = 9e9
+        while True:
+            jid = idstr()
+            tmp_job_name = job_name+"-"+jid
+            status = self.job_status(tmp_job_name)
+            if status is None:
+                job_name = tmp_job_name
+                break
+
+        for k in sets_props:
+            self.set_meta({"name":k,"value":job_name})
+
+        url = self.fill("agave://{storage_id}/{jobs_dir}/"+job_name+"/")
+        self.make_dir(self.jobs_dir)
+        job_dir = self.jobs_dir+'/'+job_name+'/'
+        self.make_dir(job_dir)
+        self.file_upload(job_dir,"input.tgz")
+
+        job = self.fill({
+            "name":job_name,
+            "appId": "{fork_app_id}",
+            "batchQueue": "{queue}",
+            "maxRunTime": str(run_time),
+            "nodeCount": nodes,
+            "processorsPerNode": ppn,
+            "archive": False,
+            "archiveSystem": "{storage_id}",
+            "inputs": {
+                "input tarball": url + "input.tgz"
+            },
+            "parameters": {
+                "sets_props":",".join(sets_props),
+                "needs_props":",".join(sets_props),
+                "nx":nx,
+                "ny":ny,
+                "nz":nz,
+                "script_name":script_name
+            },
+            "notifications": []
+        })
+
+        if jtype == 'fork':
+            job['appId'] = self.fork_app_id
+        elif jtype == 'queue':
+            job['appId'] = self.app_id
+        else:
+            raise Exception("jtype="+jtype)
+        
+        notify = None
+
+        if notify is not None:
+            for event in job_done:
+                job["notifications"] += [
+                    {
+                        "url":notify,
+                        "event":event,
+                        "persistent": True,
+                        "policy": {
+                            "retryStrategy": "DELAYED",
+                            "retryLimit": 3,
+                            "retryRate": 5,
+                            "retryDelay": 5,
+                            "saveOnFailure": True
+                        }
+                    }
+                ]
+
+        ready = True
+        for k in needs_props:
+            assert re.match(r'^property-\w+$',k), '"'+k+'"'
+            has_k = False
+            for m in self.get_meta(k):
+                if m["value"] == "READY":
+                    has_k = True
+                    break
+            if not has_k:
+                ready = False
+                break
+
+        if ready:
+            data = json.dumps(job)
+            headers = self.get_headers(data)
+            if self.is_ssh():
+                job_id = self.ssh_job(job)
+            else:
+                response = requests.post(self.fill('{apiurl}/jobs/v2/'), headers=headers, data=data)
+                check(response)
+                rdata = response.json()
+                job_id = rdata["result"]["id"]
+    
+            if verbose:
+                print(colored("Job ID:","green"), job_id)
+            data = {
+                "jobid":job_id,
+                "needs_props":list(needs_props),
+                "sets_props":list(sets_props),
+                "jetlag_id":self.jetlag_id
+            }
+            meta = {
+                "name":"jobdata-"+job_name,
+                "value":data
+            }
+            self.set_meta(meta)
+            return RemoteJob(self, job_id=job_id, job_name=job_name)
+        else:
+            data = {
+                "job": job,
+                "needs_props":list(needs_props),
+                "sets_props":list(sets_props),
+                "jetlag_id":self.jetlag_id
+            }
+            meta = {
+                "name":"jobdata-"+job_name,
+                "value":data
+            }
+            self.set_meta(meta)
+            return RemoteJob(self, job_name=job_name)
+
+#    def job_status(self, job_id):
+#        if self.is_ssh():
+#            ret = task_status(job_id)
+#            here("JOB_STATUS:",ret)
+#            return ret
+#        else:
+#            here("Not an ssh job!")
+
+#        headers = self.get_headers()
+#        # Rion says this is a db lookup, so no pause is needed here
+#        # pause()
+#        response = requests.get(self.fill("{apiurl}/jobs/v2/")+job_id, headers=headers)
+#        if response.status_code == 404:
+#            return None
+#        check(response)
+#        jdata = response.json()["result"]
+#        return jdata
+
+    def apps_list(self):
+        headers = self.get_headers()
+        response = requests.get(self.fill("{apiurl}/apps/v2/"), headers=headers)
+        check(response)
+        jdata = response.json()["result"]
+        return jdata
+
+    def jetlag_ids(self):
+        if self.is_ssh():
+            ids = []
+            exec_dir = os.path.join(home, ".sshcfg", "execution")
+            for m in os.listdir(exec_dir):
+                full = os.path.join(exec_dir, m, "execution.txt")
+                with open(full, "r") as fd:
+                    jdata = json.loads(fd.read())
+                    mid = re.sub('-exec-','-',jdata['id'])
+                    ids += [mid]
+            return ids
+        execms = {}
+        storms = {}
+        forkms = {}
+        forks = {}
+        queues = {}
+        for s in self.systems_list():
+            g = re.match(r'^(\w+)-(\w+)-(storage|exec|fork)-(\w+)(?:-(\w+)|)$', s['id'])
+            if g:
+                key = "%s-%s-%s" % (g.group(1), g.group(2), g.group(4))
+                if g.group(3) == "exec":
+                    execms[key] = 1
+                elif g.group(3) == "storage":
+                    storms[key] = 1
+                else:
+                    forkms[key] = 1
+        for a in self.apps_list():
+            # shelob-funwave_fork_tg457049-1.0.0
+            g = re.match(r'^(\w+)-(\w+)_(fork|queue)_(\w+)-(\d+\.\d+\.\d+)', a['id'])
+            if g:
+                key = "%s-%s-%s" % (g.group(1), g.group(2), g.group(4))
+                if g.group(3) == 'fork':
+                    assert key not in forks
+                    forks[key] = a['id']
+                else:
+                    assert key not in queues
+                    queues[key] = a['id']
+        jetlag_ids = []
+        for k in execms:
+            if k in storms and k in forkms and k in forks and k in queues:
+                jetlag_ids += [k]
+        return jetlag_ids
+
+    def poll(self):
+        for data in self.get_meta('jobdata-.*'):
+            g = re.match(r'jobdata-(.*)',data['name'])
+            job_name = g.group(1)
+            m = data["value"]
+            if "jobid" in m:
+                done = False
+                success = True
+                jstat = self.job_status(m["jobid"])
+                if jstat is not None:
+                    m["status"] = jstat["status"]
+                else:
+                    if verbose:
+                        print(colored("Deleting missing job:","red"),m["jobid"])
+                    self.del_meta(data)
+                    continue
+                if m["status"] == "FINISHED":
+                    done = True
+                    try:
+                        f = self.jlag.get_file(m["jobid"],"run_dir/return_code.txt")
+                    except:
+                        f = b'EXIT(616)'
+                    g = re.match("EXIT\((\d+)\)",f.decode())
+                    rc = int(g.group(1))
+                    if rc != 0:
+                        success = False
+                elif m["status"] in job_done:
+                    done = True
+
+                if done and m["sets_props"] is not None and m["sets_props"] != "null":
+                    if success:
+                        for k in m["sets_props"]:
+                            pm = {
+                                "name" : k,
+                                "value" : "READY"
+                            }
+                            if verbose:
+                                print("'%s' is ready" % k)
+                            self.set_meta(pm)
+                    else:
+                        for k in m["sets_props"]:
+                            for m in self.get_meta(k):
+                                self.del_meta(m)
+
+                if done:
+                    headers = self.get_headers()
+                    pause()
+                    jdata = self.job_status(m["jobid"])
+                    if "inputs" not in jdata:
+                        here("Missing inputs:",jdata)
+                        continue
+                    fname = jdata['inputs']['input tarball']
+                    if self.utype == "tapis":
+                        assert type(fname) == str, fname
+                    else:
+                        assert type(fname) == list, fname
+                        fname = fname[0]
+                    jg = re.match(r'^agave://([\w-]+)/(.*)/input\.tgz$',fname)
+                    assert jg is not None, fname
+                    jmach = jg.group(1)
+                    jdir = jg.group(2)
+                    jloc = jmach+'/'+jdir
+                    if verbose:
+                        print(colored("Cleanup: ","yellow"),jloc,"...",end='',flush=True,sep='')
+                    pause()
+                    try:
+                        if self.is_ssh():
+                            here(jloc)
+                            exit(0)
+                        else:
+                            response = requests.delete(self.fill('{apiurl}/files/v2/media/system/')+jloc, headers=headers)
+                            if response.status_code in success_codes:
+                                if verbose:
+                                    print("done")
+                                self.del_meta(data)
+                            elif response.status_code in [404, 500]:
+                                if verbose:
+                                    print("File gone (status_code=%d)" % response.status_code)
+                                self.del_meta(data)
+                            else:
+                                if verbose:
+                                    print("Failed (status_code=%d)" % response.status_code)
+                    except requests.exceptions.ConnectionError as ce:
+                        if verbose:
+                            print("...timed out")
+
+            elif "job" in m:
+                ready = True
+                for k in m["needs_props"]:
+                    has_k = False
+                    if k == 'property-':
+                        continue
+                    for pm in self.get_meta(k):
+                        if pm["value"] == "READY":
+                            has_k = True
+                    if not has_k:
+                        ready = False
+                        if verbose:
+                            print("  waiting for:",k)
+                if ready:
+                    job = m["job"]
+                    job_data = json.dumps(job)
+                    headers = self.get_headers(job_data)
+                    pause()
+                    response = requests.post(self.fill('{apiurl}/jobs/v2/'), headers=headers, data=job_data)
+                    check(response)
+                    rdata = response.json()
+                    job_id = rdata["result"]["id"]
+            
+                    if verbose:
+                        print(colored("Job ID:","green"), job_id)
+                    m["jobid"] = job_id
+                    del m["job"]
+                    self.set_meta(data)
+
+    def del_meta(self, data):
+        if self.is_ssh():
+            db = self.get_db()
+            db.execute("delete from meta where uuid = %d" % data["uuid"])
+            db.execute("commit");
+            return
+        headers = self.get_headers()
+        uuid = data['uuid']
+        response = requests.delete(
+            self.fill('{apiurl}/meta/v2/data/')+uuid, headers=headers, verify=False)
+        check(response)
+        res = self.get_meta(data["name"])
+        # assert len(res)==0, "Failed to delete uuid: %s" % uuid
+
+    def set_meta(self, data):
+        assert "name" in data
+        assert "value" in data
+        assert "'" not in data["name"]
+        if self.is_ssh():
+            db = self.get_db()
+            for row in self.get_meta(data["name"]):
+                self.del_meta(row)
+            sqlstmt = "insert into meta (name,value) values ('%s','%s')" % (data["name"], ser(data["value"]))
+            db.execute(sqlstmt)
+            db.execute('commit;')
+            return
+
+        n = len(data.keys())
+        assert n >= 2 and n <= 3
+
+        mlist = self.get_meta(data["name"])
+
+        headers = self.get_headers()
+        # This is wrong
+        # headers['Content-Type'] = 'application/json'
+
+        files = {
+            'fileToUpload': ('meta.txt', json.dumps(data)),
+        }
+        
+        response = requests.post(
+            self.fill('{apiurl}/meta/v2/data/'),
+            headers=headers, files=files)
+        check(response)
+        jdata = response.json()
+        data["uuid"] = jdata["result"]["uuid"]
+
+        for m in mlist:
+            if data["uuid"] == m["uuid"]:
+                # This doesn't happen
+                continue
+            self.del_meta(m)
+
+    def get_db(self):
+        db_dir = os.path.join(home, ".sqlcfg", self.agave_auth.user)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir,exist_ok=True)
+        db_file = os.path.join(db_dir, "sqlite.db")
+        db_exists = os.path.exists(db_file)
+        db = sq3.connect(db_file)
+        if not db_exists:
+            db.execute("create table meta (name text, value text, uuid integer primary key autoincrement)")
+        return db.cursor()
+
+    def get_meta(self, name):
+        name = re.sub(r'\.\*','%',name)
+        if self.is_ssh():
+            db = self.get_db()
+            sqlstmt = "select name, value, uuid from meta where name like '%s'" % name
+            result = []
+            for row in db.execute(sqlstmt):
+                a = 3
+                result += [{
+                    "name" : row[0],
+                    "value": deser(row[1]),
+                    "uuid" : row[2]
+                    }]
+            return result
+        headers = self.get_headers()
+        
+        params = (
+            ('q', '{"name":"'+name+'"}'),
+            ('limit', '10000'),
+        )
+        
+        response = requests.get(
+            self.fill('{apiurl}/meta/v2/data'), headers=headers, params=params)
+        check(response)
+
+        result = response.json()["result"]
+        result2 = []
+        for r in result:
+            m = {}
+            for k in ["name","value","uuid"]:
+                m[k] = r[k]
+            result2 += [m]
+        return result2
+
+    def get_system(self,name):
+        if self.is_ssh():
+            name = self.fill(name)
+            ddir = os.path.join(home, ".sshcfg", "id", name)
+            for p in os.listdir(ddir):
+                with open(os.path.join(ddir, p),"r") as fd:
+                    return json.loads(fd.read())
+            return {}
+        sname = self.fill(name)
+        if verbose:
+            print(colored("System:","green"),sname)
+        headers = self.get_headers()
+        response = requests.get(
+            self.fill('{apiurl}/systems/v2/'+sname), headers=headers)
+        if response.status_code == 404:
+            return None
+        check(response)
+        json_data = response.json()
+        json_data = json_data["result"]
+        return json_data
+
+    def get_storage(self):
+        return self.get_system("{storage_id}")
+
+    def get_exec(self):
+        return self.get_system("{execm_id}")
+
+    def systems_list(self):
+        headers = self.get_headers()
+        response = requests.get(self.fill("{apiurl}/systems/v2/"), headers=headers)
+        check(response)
+        jdata = response.json()["result"]
+        return jdata
+
+    def job_status(self, job_id):
+        here("job_status:",job_id)
+        if self.is_ssh():
+            ret = task_status(job_id)
+            here()
+            for job_data in self.get_meta("jobid-"+job_id):
+                pp.pprint(job_data)
+            here()
+            if ret is None:
+                jkey = 'jobdata-'+job_id
+                for meta in self.get_meta(jkey):
+                  ret = task_status(meta["value"]["job_id"])
+                  break
+            return ret
+
         headers = self.get_headers()
         response = requests.get(self.fill("{apiurl}/jobs/v2/")+job_id, headers=headers)
         if response.status_code == 404:
@@ -1614,6 +2844,11 @@ class JetLag:
         pause()
         # Prevent double slashes
         fname = re.sub(r'^/','',fname)
+        if self.is_ssh():
+            # zzz
+            self.scp_cmd([self.get_machine()+":/"+fname,as_file]) 
+            with open(as_file,"r") as fd:
+              return fd.read()
         response = requests.get(self.fill("{apiurl}/jobs/v2/")+job_id+"/outputs/media/"+fname, headers=headers)
         check(response)
         content = response.content
@@ -1636,6 +2871,50 @@ class JetLag:
         if dir == "" and verbose:
             print(colored("Output for job: "+jobid,"magenta"))
 
+        if self.is_ssh():
+            exec_txt = os.path.join(self.jetlag_dir(), "execution.txt")
+            with open(exec_txt,"r") as fd:
+                exec_data = json.loads(fd.read())
+            self.scp_cmd([self.get_machine()+":/"+exec_data["workDir"]+"/"+fname,as_file]) 
+            with open(as_file,"r") as fd:
+              return fd.read()
+        response = requests.get(self.fill("{apiurl}/jobs/v2/")+job_id+"/outputs/media/"+fname, headers=headers)
+        check(response)
+        content = response.content
+        is_binary = False
+        for header in response.headers:
+            if header.lower() == "content-type":
+                if response.headers[header].lower() == "application/octet-stream":
+                    is_binary = True
+        if as_file is not None:
+            if is_binary:
+                fd = os.open(as_file,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o0644)
+                os.write(fd,content)
+                os.close(fd)
+            else:
+                with open(as_file,"w") as fd:
+                    print(content,file=fd)
+        return content
+
+    def job_file_list(self,jobid,dir='',recurse=True):
+        if dir == "" and verbose:
+            print(colored("Output for job: "+jobid,"magenta"))
+
+        if self.is_ssh():
+            exec_txt = os.path.join(self.jetlag_dir(), "execution.txt")
+            job = None
+            for j in self.get_meta('%'):
+                if j["value"]["jobid"] == jobid:
+                    job = j
+                    break
+            with open(exec_txt,"r") as fd:
+                exec_data = json.loads(fd.read())
+            job_dir = os.path.join(exec_data["workDir"], job["name"][len("jobdata-"):])
+            out, err, rc = self.ssh_cmd(["find",job_dir])
+            li = out.strip().split('\n')
+            for line in li:
+                print(colored("file:","blue"),line)
+            return li
         headers = self.get_headers()
         params = ( ('limit', '100'), ('offset', '0'),)
         pause()
@@ -1727,12 +3006,62 @@ class JetLag:
         jdata = response.json()["result"]
         return jdata
 
+    def jetlag_dir(self):
+        assert self.is_ssh()
+        jdir = os.path.join(home, ".sshcfg", "jetlag", self.jetlag_id)
+        os.makedirs(jdir, exist_ok=True)
+        return jdir
+
+    def store_data(self, data, fname):
+        data = rm_auth(data)
+        data_file = os.path.join(self.jetlag_dir(),fname)
+        with open(data_file, "w") as fd:
+            fd.write(json.dumps(data))
+        data_dir = os.path.join(home,".sshcfg","id",data["id"])
+        os.makedirs(data_dir,exist_ok=True)
+        data_file = os.path.join(data_dir, fname)
+        with open(data_file, "w") as fd:
+            fd.write(json.dumps(data))
+
+    def is_ssh(self):
+        return self.agave_auth.utype == "ssh"
+
+    def get_machine(self):
+        return self.agave_auth.user + "@" + self.agave_auth.baseurl
+
+    def remote_cmd(self, c0, cmd):
+        auth_file = self.agave_auth.get_auth_file()
+        key_file = os.path.join(os.path.dirname(auth_file),"id_rsa")
+        pcmd = [c0,"-o","PasswordAuthentication=no","-i",key_file]+cmd
+        p = Popen(pcmd,stdout=PIPE,stderr=PIPE,universal_newlines=True)
+        out, err = p.communicate()
+        if verbose:
+            if out.strip() != "":
+                print(out)
+            if err.strip() != "":
+                print(colored(err,"red"))
+        return out,err,p.returncode
+    
+    def ssh_cmd_thread(self,cmd):
+        return run_task(self.ssh_cmd, (cmd,))
+        
+    def ssh_cmd(self, cmd):
+        return self.remote_cmd("ssh", [self.get_machine()] + cmd)
+    
+    def scp_cmd(self, cmd):
+        return self.remote_cmd("scp", cmd)
+
     def job_list(self, num):
         headers = self.get_headers()
         params = (
             ('limit',num),
         )
         pause()
+        if self.is_ssh():
+            print("Job list by ssh",self.auth.keys())
+            o,e,r = self.ssh_cmd(["squeue"])
+            assert r == 0
+            return {}
         response = requests.get(self.fill("{apiurl}/jobs/v2/"), headers=headers, params=params)
         check(response)
         jdata = response.json()["result"]
@@ -1966,6 +3295,10 @@ class Action:
     def __init__(self, auth):
         self.auth = auth
 
+    def make_dir(self,jetlag_id,dirname):
+        jl = JetLag(self.auth,jetlag_id=jetlag_id)
+        jl.make_dir(dirname)
+
     def hello_world(self,jetlag_id,jtype="fork"):
         jl = JetLag(self.auth, jetlag_id=jetlag_id)
         job = jl.hello_world_job(jtype=jtype)
@@ -2033,6 +3366,11 @@ class Action:
         #jl.del_meta(name)
         print(jl.get_meta(name))
 
+    def set_meta(self,name,value):
+        jl = JetLag(self.auth)
+        #jl.del_meta(name)
+        print(jl.set_meta({"name":name,"value":value}))
+
     def del_meta(self,name):
         jl = JetLag(self.auth)
         m = jl.get_meta(name)
@@ -2040,6 +3378,8 @@ class Action:
             print(k,jl.del_meta(k))
 
     def mkdir(self,jetlag_id,dir_name):
+        if self.is_ssh():
+            o,e,r = self.ssh_cmd(["mkdir","-p",dir_name])
         jl = JetLag(self.auth, jetlag_id=jetlag_id)
         jl.make_dir(dir_name)
 
@@ -2144,6 +3484,7 @@ def usage():
     print("Usage: jetlag.py [--ssl-verify=(yes|no)] session action")
     print("Usage: jetlag.py session-list")
     print("Usage: jetlag.py session-create (tapis|agave) user [baseurl tenant]")
+    print("Usage: jetlag.py session-create ssh user@host") 
     print("   'session': A substring which is contained exactly one session id.")
     print(" Actions:")
     for a in dir(Action):
@@ -2192,28 +3533,58 @@ if __name__ == "__main__":
             usage()
         utype = cmd_args[2]
         uname = cmd_args[3]
+        a = None
         print(colored("utype:","green"),utype)
-        print(colored("uname:","green"),uname)
-        if len(cmd_args)!=4:
-            baseurl = cmd_args[4]
-            if not re.match(r'^https://', baseurl):
-                baseurl = "https://"+baseurl
-            tenant = cmd_args[5]
-            print(colored("baseurl:","green"), baseurl)
-            print(colored("tenant:","green"), tenant)
-            jdata = json.loads(requests.get(baseurl+"/tenants/").content.decode())
-            tenant_is_good = False
-            tnames = []
-            for jresult in jdata["result"]:
-                tname = jresult["code"]
-                tnames += [tname]
-            tnames_str = "', '".join(tnames)
-            assert tenant in tnames, f"Invalid tenant: '{tenant}'. Valid names are: '{tnames_str}'"
-            a = Auth(utype, uname, baseurl=baseurl, tenant=tenant)
-        else:
-            a = Auth(utype, uname)
-        print(a)
-        print(a.get_auth_file())
+
+        # Direct ssh type of session
+        if utype == "ssh":
+            user, host = uname.split('@')
+            ssh_data = get_ssh_data()
+            if host in ssh_data:
+                if "hostname" in ssh_data:
+                    host = ssh_data[host]["hostname"]
+            set_ssh_persist(host)
+            print(colored("ssh:","green"),user,host)
+            a = Auth(utype, user, baseurl=host, tenant="ssh")
+            auth_file = a.get_auth_file()
+            auth_dir = os.path.dirname(auth_file)
+            os.makedirs(auth_dir,exist_ok=True)
+            if os.path.exists(auth_file):
+                with open(auth_file,"r") as fd:
+                    try:
+                        jdata = json.loads(fd.read())
+                    except:
+                        pass
+            else:
+                jdata = {}
+            jdata["username"] = user
+            jdata["baseurl"] = host
+            jdata["tenantid"] = "ssh"
+            jdata["access_token"] = rand_name()
+            jdata["refresh_token"] = rand_name()
+            with open(auth_file,"w") as fd:
+                print(json.dumps(jdata),end='',file=fd)
+
+        if a is None:
+            if len(cmd_args)!=4:
+                baseurl = cmd_args[4]
+                if not re.match(r'^https://', baseurl):
+                    baseurl = "https://"+baseurl
+                tenant = cmd_args[5]
+                print(colored("baseurl:","green"), baseurl)
+                print(colored("tenant:","green"), tenant)
+                jdata = json.loads(requests.get(baseurl+"/tenants/").content.decode())
+                tenant_is_good = False
+                tnames = []
+                for jresult in jdata["result"]:
+                    tname = jresult["code"]
+                    tnames += [tname]
+                tnames_str = "', '".join(tnames)
+                assert tenant in tnames, f"Invalid tenant: '{tenant}'. Valid names are: '{tnames_str}'"
+                a = Auth(utype, uname, baseurl=baseurl, tenant=tenant)
+            else:
+                a = Auth(utype, uname)
+        print(colored("auth file","green"),a.get_auth_file())
         a.create_or_refresh_token()
         exit(0)
     if len(cmd_args) < 2:
