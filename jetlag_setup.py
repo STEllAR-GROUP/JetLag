@@ -5,7 +5,7 @@ class Loader:
     def __init__(self):
         self.auth = None
         self.jlag = None
-        settings(self.loadf,{"password":"password","utype":["tapis","agave"]})
+        settings(self.loadf,{"password":"password","utype":["tapis","agave","ssh"]})
         self.r=gui_fun(self.loadf)
         self.r.add_listener(self.on_load)
 
