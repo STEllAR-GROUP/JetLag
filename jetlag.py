@@ -392,6 +392,8 @@ class Auth:
     def create_or_refresh_token(self):
         if self.utype == "ssh":
             ssh_data = get_ssh_data()
+            if self.baseurl not in ssh_data:
+                ssh_data[self.baseurl] = {}
             host_data = ssh_data[self.baseurl]
             if has_host_key(self.baseurl):
                 if "stricthostkeychecking" in host_data:
@@ -1663,16 +1665,17 @@ class JetLag:
                 continue
             self.del_meta(m)
 
-    def get_db(self):
-        db_dir = os.path.join(home, ".sqlcfg", self.agave_auth.user)
-        if not os.path.exists(db_dir):
-            os.makedirs(db_dir,exist_ok=True)
-        db_file = os.path.join(db_dir, "sqlite.db")
-        db_exists = os.path.exists(db_file)
-        db = sq3.connect(db_file)
-        if not db_exists:
-            db.execute("create table meta (name text, value text, uuid integer primary key autoincrement)")
-        return db.cursor()
+#    def get_db(self):
+#        db_dir = os.path.join(home, ".sqlcfg", self.agave_auth.user)
+#        if not os.path.exists(db_dir):
+#            os.makedirs(db_dir,exist_ok=True)
+#        db_file = os.path.join(db_dir, "sqlite.db")
+#        here(db_file)
+#        db_exists = os.path.exists(db_file)
+#        db = sq3.connect(db_file)
+#        if not db_exists:
+#            db.execute("create table meta (name text, value text, uuid integer primary key autoincrement)")
+#        return db.cursor()
 
     def get_meta(self, name):
         if self.is_ssh():
@@ -2720,7 +2723,7 @@ class JetLag:
             self.del_meta(m)
 
     def get_db(self):
-        db_dir = os.path.join(home, ".sqlcfg", self.agave_auth.user)
+        db_dir = os.path.join(home, ".sshcfg", self.agave_auth.user)
         if not os.path.exists(db_dir):
             os.makedirs(db_dir,exist_ok=True)
         db_file = os.path.join(db_dir, "sqlite.db")
