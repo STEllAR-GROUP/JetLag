@@ -2734,8 +2734,8 @@ class JetLag:
         return db.cursor()
 
     def get_meta(self, name):
-        name = re.sub(r'\.\*','%',name)
         if self.is_ssh():
+            name = re.sub(r'\.\*','%',name)
             db = self.get_db()
             sqlstmt = "select name, value, uuid from meta where name like '%s'" % name
             result = []
@@ -3357,7 +3357,7 @@ class Action:
 
     def access(self,jetlag_id,user,boolean):
         assert boolean in ["True", "False"]
-        jl = JetLag(self.auth, jetlag_id)
+        jl = JetLag(self.auth, jetlag_id=jetlag_id)
         jl.access(user,boolean == "True")
 
     def get_app_pems(self,jetlag_id):
