@@ -2870,7 +2870,7 @@ class JetLag:
                     print(content,file=fd)
         return content
 
-    def job_file_list(self,jobid,dir='',recurse=True):
+    def job_file_list(self,jobid,dir='',recurse=False):
         if dir == "" and verbose:
             print(colored("Output for job: "+jobid,"magenta"))
 
@@ -2899,7 +2899,7 @@ class JetLag:
                     print(content,file=fd)
         return content
 
-    def job_file_list(self,jobid,dir='',recurse=True):
+    def job_file_list(self,jobid,dir='',recurse=False):
         if dir == "" and verbose:
             print(colored("Output for job: "+jobid,"magenta"))
 
