@@ -1,3 +1,4 @@
+from typing import List, Tuple, Any, Union, Dict
 from hosts import *
 from ser import ser, deser
 import sqlite3 as sq3
@@ -19,6 +20,21 @@ import pprint
 from traceback import print_exc
 from tasks import run_task, task_status
 from here import here
+import tarfile
+import pwd
+
+FILE_LINK_SIZE = 1e6
+
+def getlinks(input_tgz : str) -> List[Tuple[str,str]]:
+    links = []
+    tar = tarfile.open(input_tgz, "r:gz")
+    for m in tar.getmembers():
+        if m.name.endswith(".link"):
+            f = tar.extractfile(m)
+            if f is not None:
+                content = f.read().decode()
+                links += [(m.name, content.strip())]
+    return links
 
 _here = os.path.realpath(".")
 
@@ -41,7 +57,7 @@ status_color = {
     "FINISHED" : "green",
     "PENDING" : "cyan",
 }
-def get_status_color(status):
+def get_status_color(status : str)->str:
     if status in status_color:
         return status_color[status]
     else:
@@ -51,7 +67,13 @@ has_color = False
 
 now = time()
 
-def rm_auth(d):
+JType = Union[Dict[str,'JType'],List['JType'],str,int]
+
+def rm_auth(d : JType)->JType:
+    """
+    Recurse through arbitrary lists, dicts, etc.
+    and remove the 'auth' key from any dict.
+    """
     if type(d) == dict:
         r = {}
         for k in d:
@@ -65,12 +87,12 @@ def rm_auth(d):
         return d
 
 verbose = False
-def set_verbose(v):
+def set_verbose(v : bool) -> bool:
     global verbose
     verbose = v
 
 
-def ago(ts):
+def ago(ts : int)->str:
     s = []
     year_sec = 60*60*24*355
     if ts > year_sec:
@@ -146,7 +168,8 @@ def pcmd(cmd,input=None,cwd=None):
     """
     Generalized pipe command with some convenient options
     """
-    #print(colored(' '.join(cmd),"magenta"))
+    if verbose:
+        print(colored(' '.join(cmd),"magenta"))
     p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True, cwd=cwd)
     if input is not None:
         if verbose:
@@ -179,7 +202,8 @@ def link_filter(data):
 def key2(a):
     return int(1e6*a[1])
 
-home = os.environ['HOME']
+# Most reliable way to get HOME
+home = pwd.getpwuid(os.getuid()).pw_dir
 
 def pause():
     pass
@@ -1253,6 +1277,7 @@ class JetLag:
         Upload a file to a directory. The variable dir_name is relative
         to the home directory.
         """
+        raise Exception()
         dir_name = self.fill(dir_name)
         file_name = self.fill(file_name)
         if verbose:
@@ -1287,172 +1312,173 @@ class JetLag:
         response = requests.post(url, headers=headers, files=files)
         check(response)
 
-    def hello_world_job(self, jtype='fork',sets_props={},needs_props={}, sleep_time=1):
-        """
-        Create and send a "Hello World" job to make
-        sure that the system is working.
-        """
-        input_tgz = {}
+#    def hello_world_job(self, jtype='fork',sets_props={},needs_props={}, sleep_time=1):
+#        """
+#        Create and send a "Hello World" job to make
+#        sure that the system is working.
+#        """
+#        input_tgz = {}
 
-        return self.run_job('hello-world', input_tgz, jtype=jtype, run_time="00:01:00", sets_props=sets_props, needs_props=needs_props)
+#        return self.run_job('hello-world', input_tgz, jtype=jtype, run_time="00:01:00", sets_props=sets_props, needs_props=needs_props)
 
-    def run_job(self, job_name, input_tgz=None, jtype='fork', nodes=0, ppn=0, run_time=None, sets_props={}, needs_props={}, nx=0, ny=0, nz=0, script_name='helloworld'):
-        """
-        Run a job. It must have a name and an input tarball. It will default
-        to running in a queue, but fork can also be requested. Specifying
-        the run-time is a good idea, but not required.
-        """
-        if ppn == 0:
-            ppn = int(self.fill("{max_procs_per_node}"))
-        if nodes == 0:
-            nodes = ceil(nx*ny*nz/ppn)
+#    def run_job(self, job_name, input_tgz=None, jtype='fork', nodes=0, ppn=0, run_time=None, sets_props={}, needs_props={}, nx=0, ny=0, nz=0, script_name='helloworld'):
+#        """
+#        Run a job. It must have a name and an input tarball. It will default
+#        to running in a queue, but fork can also be requested. Specifying
+#        the run-time is a good idea, but not required.
+#        """
+#        if ppn == 0:
+#            ppn = int(self.fill("{max_procs_per_node}"))
+#        if nodes == 0:
+#            nodes = ceil(nx*ny*nz/ppn)
 
-        if nx != 0 or ny != 0 or nz != 0:
-            assert nx != 0 and ny != 0 and nz != 0
-            assert nx*ny*nz <= ppn*nodes
+#        if nx != 0 or ny != 0 or nz != 0:
+#            assert nx != 0 and ny != 0 and nz != 0
+#            assert nx*ny*nz <= ppn*nodes
 
-        if nodes == 0:
-            nodes = 1
+#        if nodes == 0:
+#            nodes = 1
 
-        max_ppn = int(self.fill("{max_procs_per_node}"))
-        assert ppn <= max_ppn, '%d <= %d' % (ppn, max_ppn)
-        assert ppn >= 1
-        assert nodes >= 1
+#        max_ppn = int(self.fill("{max_procs_per_node}"))
+#        assert ppn <= max_ppn, '%d <= %d' % (ppn, max_ppn)
+#        assert ppn >= 1
+#        assert nodes >= 1
 
-        for k in sets_props:
-            for m in self.get_meta(k):
-                print("Property '%s' is already set" % k)
-                return None
+#        for k in sets_props:
+#            for m in self.get_meta(k):
+#                print("Property '%s' is already set" % k)
+#                return None
 
-        self.agave_auth.refresh_token()
+#        self.agave_auth.refresh_token()
 
-        if input_tgz is not None:
-            mk_input(input_tgz)
+#        if input_tgz is not None:
+#            mk_input(input_tgz)
 
-        if run_time is None:
-            run_time = self.max_run_time
 
-        digits = 10
-        max_val = 9e9
-        while True:
-            jid = idstr()
-            tmp_job_name = job_name+"-"+jid
-            status = self.job_status(tmp_job_name)
-            if status is None:
-                job_name = tmp_job_name
-                break
+#        if run_time is None:
+#            run_time = self.max_run_time
 
-        for k in sets_props:
-            self.set_meta({"name":k,"value":job_name})
+#        digits = 10
+#        max_val = 9e9
+#        while True:
+#            jid = idstr()
+#            tmp_job_name = job_name+"-"+jid
+#            status = self.job_status(tmp_job_name)
+#            if status is None:
+#                job_name = tmp_job_name
+#                break
 
-        url = self.fill("agave://{storage_id}/{jobs_dir}/"+job_name+"/")
-        self.make_dir(self.jobs_dir)
-        job_dir = self.jobs_dir+'/'+job_name+'/'
-        self.make_dir(job_dir)
-        self.file_upload(job_dir,"input.tgz")
+#        for k in sets_props:
+#            self.set_meta({"name":k,"value":job_name})
 
-        job = self.fill({
-            "name":job_name,
-            "appId": "{fork_app_id}",
-            "batchQueue": "{queue}",
-            "maxRunTime": str(run_time),
-            "nodeCount": nodes,
-            "processorsPerNode": ppn,
-            "archive": False,
-            "archiveSystem": "{storage_id}",
-            "inputs": {
-                "input tarball": url + "input.tgz"
-            },
-            "parameters": {
-                "sets_props":",".join(sets_props),
-                "needs_props":",".join(sets_props),
-                "nx":nx,
-                "ny":ny,
-                "nz":nz,
-                "script_name":script_name
-            },
-            "notifications": []
-        })
+#        url = self.fill("agave://{storage_id}/{jobs_dir}/"+job_name+"/")
+#        self.make_dir(self.jobs_dir)
+#        job_dir = self.jobs_dir+'/'+job_name+'/'
+#        self.make_dir(job_dir)
+#        self.file_upload(job_dir,"input.tgz")
 
-        if jtype == 'fork':
-            job['appId'] = self.fork_app_id
-        elif jtype == 'queue':
-            job['appId'] = self.app_id
-        else:
-            raise Exception("jtype="+jtype)
-        
-        notify = None
+#        job = self.fill({
+#            "name":job_name,
+#            "appId": "{fork_app_id}",
+#            "batchQueue": "{queue}",
+#            "maxRunTime": str(run_time),
+#            "nodeCount": nodes,
+#            "processorsPerNode": ppn,
+#            "archive": False,
+#            "archiveSystem": "{storage_id}",
+#            "inputs": {
+#                "input tarball": url + "input.tgz"
+#            },
+#            "parameters": {
+#                "sets_props":",".join(sets_props),
+#                "needs_props":",".join(sets_props),
+#                "nx":nx,
+#                "ny":ny,
+#                "nz":nz,
+#                "script_name":script_name
+#            },
+#            "notifications": []
+#        })
 
-        if notify is not None:
-            for event in job_done:
-                job["notifications"] += [
-                    {
-                        "url":notify,
-                        "event":event,
-                        "persistent": True,
-                        "policy": {
-                            "retryStrategy": "DELAYED",
-                            "retryLimit": 3,
-                            "retryRate": 5,
-                            "retryDelay": 5,
-                            "saveOnFailure": True
-                        }
-                    }
-                ]
+#        if jtype == 'fork':
+#            job['appId'] = self.fork_app_id
+#        elif jtype == 'queue':
+#            job['appId'] = self.app_id
+#        else:
+#            raise Exception("jtype="+jtype)
+#        
+#        notify = None
 
-        ready = True
-        for k in needs_props:
-            assert re.match(r'^property-\w+$',k), '"'+k+'"'
-            has_k = False
-            for m in self.get_meta(k):
-                if m["value"] == "READY":
-                    has_k = True
-                    break
-            if not has_k:
-                ready = False
-                break
+#        if notify is not None:
+#            for event in job_done:
+#                job["notifications"] += [
+#                    {
+#                        "url":notify,
+#                        "event":event,
+#                        "persistent": True,
+#                        "policy": {
+#                            "retryStrategy": "DELAYED",
+#                            "retryLimit": 3,
+#                            "retryRate": 5,
+#                            "retryDelay": 5,
+#                            "saveOnFailure": True
+#                        }
+#                    }
+#                ]
 
-        if ready:
-            data = json.dumps(job)
-            headers = self.get_headers(data)
-            if self.is_ssh():
-                job_id = self.ssh_job(job)
-                # yyy
-                here("CALLING SET-META WITH JOB")
-                self.set_meta("jobid-"+job_id,job)
-            else:
-                response = requests.post(self.fill('{apiurl}/jobs/v2/'), headers=headers, data=data)
-                check(response)
-                rdata = response.json()
-                job_id = rdata["result"]["id"]
-    
-            if verbose:
-                print(colored("Job ID:","green"), job_id)
-            data = {
-                "jobid":job_id,
-                "needs_props":list(needs_props),
-                "sets_props":list(sets_props),
-                "jetlag_id":self.jetlag_id
-            }
-            meta = {
-                "name":"jobdata-"+job_name,
-                "value":data
-            }
-            self.set_meta(meta)
-            return RemoteJob(self, job_id=job_id, job_name=job_name)
-        else:
-            data = {
-                "job": job,
-                "needs_props":list(needs_props),
-                "sets_props":list(sets_props),
-                "jetlag_id":self.jetlag_id
-            }
-            meta = {
-                "name":"jobdata-"+job_name,
-                "value":data
-            }
-            self.set_meta(meta)
-            return RemoteJob(self, job_name=job_name)
+#        ready = True
+#        for k in needs_props:
+#            assert re.match(r'^property-\w+$',k), '"'+k+'"'
+#            has_k = False
+#            for m in self.get_meta(k):
+#                if m["value"] == "READY":
+#                    has_k = True
+#                    break
+#            if not has_k:
+#                ready = False
+#                break
+
+#        if ready:
+#            data = json.dumps(job)
+#            headers = self.get_headers(data)
+#            if self.is_ssh():
+#                job_id = self.ssh_job(job)
+#                # yyy
+#                here("CALLING SET-META WITH JOB")
+#                self.set_meta("jobid-"+job_id,job)
+#            else:
+#                response = requests.post(self.fill('{apiurl}/jobs/v2/'), headers=headers, data=data)
+#                check(response)
+#                rdata = response.json()
+#                job_id = rdata["result"]["id"]
+#    
+#            if verbose:
+#                print(colored("Job ID:","green"), job_id)
+#            data = {
+#                "jobid":job_id,
+#                "needs_props":list(needs_props),
+#                "sets_props":list(sets_props),
+#                "jetlag_id":self.jetlag_id
+#            }
+#            meta = {
+#                "name":"jobdata-"+job_name,
+#                "value":data
+#            }
+#            self.set_meta(meta)
+#            return RemoteJob(self, job_id=job_id, job_name=job_name)
+#        else:
+#            data = {
+#                "job": job,
+#                "needs_props":list(needs_props),
+#                "sets_props":list(sets_props),
+#                "jetlag_id":self.jetlag_id
+#            }
+#            meta = {
+#                "name":"jobdata-"+job_name,
+#                "value":data
+#            }
+#            self.set_meta(meta)
+#            return RemoteJob(self, job_name=job_name)
 
     def apps_list(self):
         headers = self.get_headers()
@@ -2364,6 +2390,30 @@ class JetLag:
         if input_tgz is not None:
             mk_input(input_tgz)
 
+            links = getlinks("input.tgz")
+            for link in links:
+                name, origin = link
+                assert type(origin) == str
+                if name.endswith(".link"):
+                    # Load the file_links from disk
+                    auth_file = self.agave_auth.get_auth_file()
+                    print("auth_file:",auth_file)
+                    auth_dir = os.path.dirname(auth_file)
+                    file_links = os.path.join(auth_dir, "file_links.txt")
+                    if os.path.exists(file_links):
+                        with open(file_links, "r") as fd:
+                            file_links_data = json.loads(fd.read())
+                    else:
+                        file_links_data = {}
+
+                    # If the data in file_links_data is out of date, upload
+                    st = os.stat(origin)
+                    if origin not in file_links_data or file_links_data[origin] != st.st_mtime:
+                        self.file_upload('{deployment_path}',origin)
+                        file_links_data[origin] = st.st_mtime
+                        with open(file_links,"w") as fd:
+                            fd.write(json.dumps(file_links_data))
+
         if run_time is None:
             run_time = self.max_run_time
 
@@ -2802,7 +2852,6 @@ class JetLag:
         return jdata
 
     def job_status(self, job_id):
-        here("job_status:",job_id)
         if self.is_ssh():
             ret = task_status(job_id)
             here()
@@ -3145,6 +3194,14 @@ def clone_machine(auth, name, user, home_dir=None, root_dir=None, work_dir=None,
     #    pp.pprint(spec)
     return spec #JetLag(auth, **spec)
 
+class FileLink:
+    def __init__(self, link):
+        self.link = link
+
+class FileContents:
+    def __init__(self, contents):
+        self.contents = contents
+
 def mk_input(input_tgz):
     """
     Generate a tarball from a hash of file names/contents.
@@ -3152,8 +3209,25 @@ def mk_input(input_tgz):
     pcmd(["rm","-fr","run_dir"])
     os.mkdir("run_dir")
     for k in input_tgz.keys():
-        with open("run_dir/"+k,"w") as fd:
-            print(input_tgz[k].strip(),file=fd)
+        val = input_tgz[k]
+        t = type(val)
+        fname = os.path.join("run_dir",k)
+        if t == FileLink:
+            s = os.stat(val.link)
+            if s.st_size < FILE_LINK_SIZE:
+                pcmd(["cp",val.link,fname])
+            else:
+                fname += ".link"
+                with open(fname,"w") as fd:
+                    print(val.link,file=fd)
+        elif t == FileContents:
+            with open(fname,"w") as fd:
+                print(val.contents,file=fd)
+        elif t == str:
+            with open(fname,"w") as fd:
+                print(input_tgz[k].strip(),file=fd)
+        else:
+            raise Exception("Bad value to dict input_tgz")
     pcmd(["tar","czf","input.tgz","run_dir"])
 
 class RemoteJob:

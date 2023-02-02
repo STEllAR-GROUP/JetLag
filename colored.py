@@ -1,12 +1,16 @@
+from typing import Callable
+
 import sys
 
-def not_colored(a,_):
+def not_colored(a : str,_ : str)->str:
     return a
 
 installed = None
 
+colored : Callable[[str,str],str]
 try:
-    from termcolor import colored
+    from termcolor import colored as colored_
+    colored = colored_
     installed = True
 except:
     colored = not_colored
