@@ -1,4 +1,4 @@
-from typing import List, Tuple, Any, Union, Dict
+from typing import List, Tuple, Any, Union, Dict, Optional
 from hosts import *
 from ser import ser, deser
 import sqlite3 as sq3
@@ -40,7 +40,7 @@ _here = os.path.realpath(".")
 
 baseurl = None
 cmd_args = []
-time_array = []
+time_array : List[Tuple[str,int]] = []
 pause_files = 5
 pause_time = 30
 poll_time = 5
@@ -86,8 +86,8 @@ def rm_auth(d : JType)->JType:
     else:
         return d
 
-verbose = False
-def set_verbose(v : bool) -> bool:
+verbose : bool = False
+def set_verbose(v : bool) -> None:
     global verbose
     verbose = v
 
@@ -119,7 +119,7 @@ def ago(ts : int)->str:
     return " + ".join(s)
 
 
-def get_json(response):
+def get_json(response)->Optional[JType]:
     content = response.content
     try:
         json = response.json()
@@ -132,7 +132,7 @@ def get_json(response):
     return json
 
 
-def from_agave_time(ts):
+def from_agave_time(ts : int)->Tuple[str,int]:
     from time import mktime, time
     from datetime import datetime
     import re
@@ -219,7 +219,7 @@ def _pause():
                 with open(tmp_file,"w") as fd:
                     pass
             tmp_age = os.path.getmtime(tmp_file)
-            time_array += [[tmp_file,tmp_age]]
+            time_array += [(tmp_file,tmp_age)]
 
     # For some reason, time() doesn't always return
     # a value of now that's consistent with the file system.
