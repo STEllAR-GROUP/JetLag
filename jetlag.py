@@ -1,4 +1,4 @@
-from typing import List, Tuple, Any, Union, Dict, Optional
+from typing import List, Tuple, Any, Union, Dict, Optional, cast
 from hosts import *
 from ser import ser, deser
 import sqlite3 as sq3
@@ -22,8 +22,11 @@ from tasks import run_task, task_status
 from here import here
 import tarfile
 import pwd
+from requests.models import Response
 
 FILE_LINK_SIZE = 1e6
+
+ostr = Optional[str]
 
 def getlinks(input_tgz : str) -> List[Tuple[str,str]]:
     links = []
@@ -40,7 +43,7 @@ _here = os.path.realpath(".")
 
 baseurl = None
 cmd_args = []
-time_array : List[Tuple[str,int]] = []
+time_array : List[Tuple[str,float]] = []
 pause_files = 5
 pause_time = 30
 poll_time = 5
@@ -119,20 +122,18 @@ def ago(ts : int)->str:
     return " + ".join(s)
 
 
-def get_json(response)->Optional[JType]:
+def get_json(response : Response)->Optional[JType]:
     content = response.content
+    json : Optional[JType] = None
     try:
-        json = response.json()
+        json = cast(JType,response.json())
     except:
-        json = None
-        if type(content) == bytes:
-            content = content.decode()
         print("content:",content)
         requests.show()
     return json
 
 
-def from_agave_time(ts : int)->Tuple[str,int]:
+def from_agave_time(ts : str)->Tuple[datetime,float]:
     from time import mktime, time
     from datetime import datetime
     import re
@@ -158,13 +159,13 @@ def from_agave_time(ts : int)->Tuple[str,int]:
 # to indicate succes.
 success_codes = [200, 201, 202]
 
-def age(fname):
+def age(fname : str)->float:
     "Compute the age of a file in seconds"
     t1 = os.path.getmtime(fname)
     t2 = time()
     return t2 - t1
 
-def pcmd(cmd,input=None,cwd=None):
+def pcmd(cmd : str,input : ostr=None,cwd : ostr=None)->Tuple[int, str, str]:
     """
     Generalized pipe command with some convenient options
     """
@@ -184,7 +185,7 @@ def pcmd(cmd,input=None,cwd=None):
             print(colored(err,"red"),end='')
     return p.returncode, out, err
 
-def link_filter(data):
+def link_filter(data : JType)->JType:
     if type(data) == dict:
         new_dict = {}
         for k in data:
@@ -193,21 +194,22 @@ def link_filter(data):
         return new_dict
     elif type(data) == list:
         new_list = []
-        for k in data:
-            new_list += [link_filter(k)]
+        for n in data:
+            new_list += [link_filter(n)]
         return new_list
     else:
         return data
 
-def key2(a):
+def key2(a : Tuple[str,float])->int:
     return int(1e6*a[1])
 
 # Most reliable way to get HOME
 home = pwd.getpwuid(os.getuid()).pw_dir
 
-def pause():
+def pause()->None:
     pass
-def _pause():
+
+def _pause()->None:
     global time_array
     tmp_dir = os.path.join(home,"tmp","times")
     if len(time_array) == 0:
@@ -239,9 +241,9 @@ def _pause():
         print("done",flush=True)
     with open(time_array[0][0],"w") as fd:
         pass
-    time_array[0][1] = os.path.getmtime(time_array[0][0])
+    time_array[0] = (time_array[0][0],os.path.getmtime(time_array[0][0]))
 
-def idstr():
+def idstr()->str:
     base = ''
     for i in range(ord('a'),ord('z')+1):
         base += chr(i)
@@ -254,20 +256,19 @@ def idstr():
         s += base[randint(0, len(base)-1)]
     return s
 
-def codeme(m):
-    t = type(m)
-    if t == str:
-        m = m.encode()
-    elif t == bytes:
-        pass
+def codeme(m : Union[str,bytes]) -> str:
+    if type(m) == str:
+        b = m.encode()
+    elif type(m) == bytes:
+        b = m
     else:
-        raise Exception(str(t))
-    h = hashlib.md5(m)
+        raise Exception(str(type(m)))
+    h = hashlib.md5(b)
     v = base64.b64encode(h.digest())
     s = re.sub(r'[\+/]','_', v.decode())
     return s[:-2]
 
-def check(response):
+def check(response : Response) -> None:
     """
     Called after receiving a response from the requests library to ensure that
     an error was not received.
@@ -282,7 +283,8 @@ def check(response):
         raise Exception(msg)
 
 default_agave = os.path.join(home,".agave","current")
-def get_current(fname):
+
+def get_current(fname : str)->List[str]:
     ret = []
     if os.path.isdir(fname):
         for f in os.listdir(fname):
@@ -294,7 +296,7 @@ def get_current(fname):
             ret += get_current(full)
     return ret
 
-def get_auth_by_fname(fname):
+def get_auth_by_fname(fname : str)->'Auth':
     with open(fname,"r") as fd:
         jdata = json.loads(fd.read())
         if "/.tapis/" in fname:
@@ -312,7 +314,7 @@ def get_auth_by_fname(fname):
         raise Exception("Bad auth file: %s != %s" % (afile, fname))
     return a
 
-def get_auth_sessions():
+def get_auth_sessions()->List[str]:
     names = \
         get_current(os.path.join(home, ".agave")) + \
         get_current(os.path.join(home, ".tapis")) + \
@@ -327,7 +329,7 @@ def get_auth_sessions():
             names += [agave_cache_file]
     return names
 
-def get_auth_by_session(name):
+def get_auth_by_session(name : str)->'Auth':
     sessions = get_auth_sessions()
     auths = []
     idstrs = []
@@ -353,10 +355,11 @@ class Auth:
     """
     The Universal (i.e. Tapis or Agave) authorization
     """
-    def __init__(self, utype, user=None, password=None, baseurl=None, tenant=None, client=None):
+    def __init__(self, utype:str, user:ostr=None, password:ostr=None, baseurl:ostr=None, tenant:ostr=None, client:ostr=None)->None:
         self.client = client
         self.is_valid = False
-        assert '@' not in user
+        if user is not None:
+            assert '@' not in user
         assert utype in ['tapis', 'agave', 'ssh'], 'utype="%s"' % utype
 
         # Fill in the default baseurl
@@ -390,17 +393,17 @@ class Auth:
 
         self.auth_age = None
 
-    def __repr__(self):
+    def __repr__(self)->str:
         return self.get_idstr()
 
-    def get_idstr(self):
+    def get_idstr(self)->str:
         #idstr = self.utype+"+"+self.tenant+":"+self.user+"@"+self.baseurl
         idstr = self.utype+":"+self.user+":"+re.sub(r'^https://','',self.baseurl)+":"+self.tenant
         if self.client is not None:
             idstr += ":"+self.client
         return idstr
 
-    def get_auth_file(self):
+    def get_auth_file(self)->str:
         burl = codeme("~".join([
             self.tenant,
             self.baseurl,
@@ -413,7 +416,7 @@ class Auth:
             ut = "."+self.utype
         return os.path.join(home, ut, self.user, burl, "current")
 
-    def create_or_refresh_token(self):
+    def create_or_refresh_token(self)->None:
         if self.utype == "ssh":
             ssh_data = get_ssh_data()
             if self.baseurl not in ssh_data:
@@ -435,17 +438,17 @@ class Auth:
         if not self.refresh_token():
             self.create_token()
 
-    def get_password(self):
+    def get_password(self)->str:
         if self.password is None:
             from getpass import getpass
             self.password = getpass(self.utype[0].upper() + self.utype[1:] + " Password: ")
         return self.password
 
-    def create_token(self):
+    def create_token(self)->Optional[JType]:
 
         if self.utype == "ssh":
             self.is_valid = True
-            return
+            return None
 
         auth = (
             self.user,
@@ -767,7 +770,7 @@ class JetLag:
         return str(self.ssh_cmd_thread(["bash",f"{job_dir}/job-exec.sh"]))
 
 
-    def fill(self, obj):
+    def fill(self, obj : JType)->JType:
         if obj is None:
             return obj
         elif type(obj) == str:
@@ -2493,7 +2496,7 @@ class Action:
             print("File 'tmp.py' created. Edit and run to configure or reconfigure.")
 
 
-def usage():
+def usage()->None:
     print("Usage: jetlag.py [--ssl-verify=(yes|no)] session action")
     print("Usage: jetlag.py session-list")
     print("Usage: jetlag.py session-create (tapis|agave) user [baseurl tenant]")
