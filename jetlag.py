@@ -165,7 +165,7 @@ def age(fname : str)->float:
     t2 = time()
     return t2 - t1
 
-def pcmd(cmd : str,input : ostr=None,cwd : ostr=None)->Tuple[int, str, str]:
+def pcmd(cmd : List[str],input : ostr=None,cwd : ostr=None)->Tuple[int, str, str]:
     """
     Generalized pipe command with some convenient options
     """
@@ -2534,14 +2534,14 @@ if __name__ == "__main__":
         n = 0
         for session in get_auth_sessions():
             a = get_auth_by_fname(session)
-            idstr = a.get_idstr()
+            idstr_ = a.get_idstr()
             auth_file = a.get_auth_file()
             n += 1
             if n == 3:
-                print(colored(idstr,"cyan"))
+                print(colored(idstr_,"cyan"))
                 print(colored("  file:","blue"),colored(auth_file,"green"))
             else:
-                print(idstr)
+                print(idstr_)
                 print(colored("  file:","blue"),colored(auth_file,"yellow"))
         exit(0)
     if len(cmd_args) > 1 and cmd_args[1] in ["session-create","session_create"]:
@@ -2549,7 +2549,6 @@ if __name__ == "__main__":
             usage()
         utype = cmd_args[2]
         uname = cmd_args[3]
-        a = None
         print(colored("utype:","green"),utype)
 
         # Direct ssh type of session
@@ -2626,9 +2625,10 @@ if __name__ == "__main__":
     else:
         print("Attempted action was:",action_name)
         print("Valid actions are:")
-        for a in dir(action):
-            item = getattr(action, a)
-            if not re.match(r'^__', a) and hasattr(item, "__call__"):
-                print(" ",a)
+        s : str
+        for s in dir(action):
+            item = getattr(action, s)
+            if not re.match(r'^__', s) and hasattr(item, "__call__"):
+                print(" ",s)
         print("Not a valid action: '%s'" % re.sub(r'_','-',action_name))
         usage()
