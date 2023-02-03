@@ -1,11 +1,14 @@
+from typing import Dict, Optional
 import os
 import re
 
 home = os.environ["HOME"]
 
-def get_ssh_data():
+host_data_type = Dict[str,Dict[str,str]]
+
+def get_ssh_data()->host_data_type:
     ssh_config = os.path.join(home, ".ssh", "config")
-    ssh_data = {}
+    ssh_data : host_data_type = {}
     host = None
     if os.path.exists(ssh_config):
         with open(ssh_config,"r") as fd:
@@ -15,15 +18,17 @@ def get_ssh_data():
                 line = re.sub(r'#.*','',line)
                 g = re.match(r'^(\S+)\s+(.+)', line)
                 if g:
-                    key, value = g.group(1).lower(), re.sub(r'^=\s*','',g.group(2))
+                    key : str = g.group(1).lower()
+                    value : str = re.sub(r'^=\s*','',g.group(2))
                     if key.lower() == "host" and value not in ssh_data:
                         host = value
                         ssh_data[host] = {}
                     else:
+                        assert host is not None
                         ssh_data[host][key] = value
     return ssh_data
 
-def set_ssh_data(host,key,value):
+def set_ssh_data(host:str,key:str,value:Optional[str])->None:
     assert type(host) == str, "Host must be a str"
     assert type(key) == str, "Key must be a str"
     assert value is None or type(value) == str, "Value must be a str or None"
@@ -48,7 +53,7 @@ def set_ssh_data(host,key,value):
           for key in host_data:
               print("   ",key,host_data[key],file=fd)
 
-def has_host_key(host):
+def has_host_key(host:str)->bool:
     host = host.strip().lower()
     ssh_data = get_ssh_data()
     if host in ssh_data:
@@ -62,7 +67,7 @@ def has_host_key(host):
                 return True
     return False
 
-def set_ssh_persist(host):
+def set_ssh_persist(host:str)->None:
     set_ssh_data(host,"ControlMaster","auto")
     set_ssh_data(host,"ControlPath","~/.ssh/control-%h-%p-%r")
     set_ssh_data(host,"ControlPersist","1m")

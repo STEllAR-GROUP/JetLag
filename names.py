@@ -13,7 +13,7 @@ nouns = [
     "Walrus", "Dolphin", "Whale", "Rhino", "Bull", "Cow", "Chicken",
     "Snail", "Mantis", "Vole", "Rat", "Mouse"]
 
-def rand_name():
+def rand_name()->str:
     i = randint(0, len(adjectives)-1)
     j = randint(0, len(nouns)-1)
     return "%s%s%d" % (adjectives[i], nouns[j], randint(0,100))

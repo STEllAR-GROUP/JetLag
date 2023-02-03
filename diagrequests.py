@@ -1,16 +1,17 @@
+from typing import Any, IO, List, Dict, Tuple, get_type_hints, Union, cast, Set, Optional
 import requests
 import os
 import re
 import sys
 from contextlib import redirect_stdout
-import pprint
 from datetime import datetime
+from requests.models import Response
 
 exceptions = requests.exceptions
 
-hidden = set()
+hidden : Set[Any] = set()
 
-def pprint(obj,indent=0,fd=sys.stdout):
+def pprint(obj : Any,indent:int=0,fd : IO[str]=sys.stdout)->None:
     t = type(obj)
     if t in [list, set, tuple]:
         if t == tuple:
@@ -54,7 +55,7 @@ debug_fd = None
 
 warned_ssl_false = False
 
-def check_ssl():
+def check_ssl()->None:
     global warned_ssl_false
     if verify_ssl == False:
         if warned_ssl_false:
@@ -68,12 +69,12 @@ def check_ssl():
 
 check_ssl()
 
-def set_ssl(v):
+def set_ssl(v : bool) -> None:
     global verify_ssl
     verify_ssl = v
     check_ssl()
 
-def all(mname, args, kargs, verbose=False):
+def all(mname : str, args : Tuple[Any,...], kargs : Dict[str,Any], verbose : bool=False)->None:
     global save
     jetlag_debug = os.environ.get("JETLAG_DEBUG", "0")
     if jetlag_debug in ["stdout","1"]:
@@ -113,26 +114,26 @@ def all(mname, args, kargs, verbose=False):
     else:
         save = (mname, args, kargs)
 
-def show():
+def show()->None:
     if save is not None:
         all(save[0], save[1], save[2], True)
 
-def get(*args,**kargs):
+def get(*args : Any,**kargs : Any)->Response:
     all("get",args,kargs)
     kargs["verify"] = verify_ssl
     return requests.get(*args,**kargs)
 
-def post(*args,**kargs):
+def post(*args : Any,**kargs : Any)->Response:
     all("post",args,kargs)
     kargs["verify"] = verify_ssl
     return requests.post(*args,**kargs)
 
-def delete(*args,**kargs):
+def delete(*args : Any,**kargs : Any)->Response:
     all("delete",args,kargs)
     kargs["verify"] = verify_ssl
     return requests.delete(*args,**kargs)
 
-def put(*args,**kargs):
+def put(*args : Any,**kargs : Any)->Response:
     all("put",args,kargs)
     kargs["verify"] = verify_ssl
     return requests.put(*args,**kargs)
