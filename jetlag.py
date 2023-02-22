@@ -334,7 +334,11 @@ def get_auth_by_session(name : str)->'Auth':
     auths = []
     idstrs = []
     for session in sessions:
-        a = get_auth_by_fname(session)
+        try:
+            a = get_auth_by_fname(session)
+        except:
+            # Skip over bad sessions
+            continue
         idstr = a.get_idstr()
         idstrs += [idstr]
         if name in idstr:
@@ -736,6 +740,10 @@ class JetLag:
         if domain is None:
             # Load data from an existing machine
             exec_data = self.get_exec()
+            if exec_data is None:
+                # Provide a more informative error
+                print(colored("ERROR: No data for the exec machine. Wrong jetlag id?","red"))
+                return None
             self.domain = exec_data["site"]
             self.port = exec_data["login"]["port"]
             self.queue = exec_data["queues"][0]["name"]
@@ -2533,7 +2541,11 @@ if __name__ == "__main__":
     if len(cmd_args)==2 and cmd_args[1] in ["sessions","session-list","session_list"]:
         n = 0
         for session in get_auth_sessions():
-            a = get_auth_by_fname(session)
+            try:
+                a = get_auth_by_fname(session)
+            except:
+                # Skip over bad sessions
+                continue
             idstr_ = a.get_idstr()
             auth_file = a.get_auth_file()
             n += 1

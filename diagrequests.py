@@ -50,7 +50,7 @@ save = None
 
 verify_ssl_env = os.environ.get("VERIFY_SSL","yes").lower()
 assert verify_ssl_env in ["yes", "no"], "VERIFY_SSL must be YES or NO"
-verify_ssl = verify_ssl_env == "yes"
+verify_ssl : bool = verify_ssl_env == "yes"
 debug_fd = None
 
 warned_ssl_false = False
