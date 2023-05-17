@@ -1,8 +1,16 @@
-from typing import cast, List, Optional
-from jetlag2 import AuthBase, home, pcmd, JDict, Machine, machine_from_data, JetlagBase
+from typing import cast, List, Optional, Union
+from jetlag import AuthBase, home, pcmd, JDict, Machine, machine_from_data, JetlagBase, JobBase, tgz_type, ostr, JType
+from subprocess import call as call_
 from colored import colored
 import os, json
 import uuid
+
+verbose = True
+
+def call(cmd):
+    if verbose:
+        print(colored("Call:","green"),cmd)
+    return call_(cmd)
 
 class SSHAuth(AuthBase):
     def __init__(self)->None:
@@ -61,7 +69,25 @@ class SSHAuth(AuthBase):
 
 class SSHJob(JobBase):
     def __init__(self, jetlag:'JetlagBase', jobid:str, jobname:str)->None:
-        JobBase.__init__(jetlag, jobid, jobname)
+        JobBase.__init__(self, jetlag, jobid, jobname)
+    
+    def get_status(self)->Optional[str]:
+        ...
+    
+    def stop(self)->JType:
+        ...
+    
+    def show_history(self)->None:
+        ...
+    
+    def get_result(self, force:bool=True)->JType:
+        job_dir = "jobdata-"+self.jobid
+        if os.path.exists(job_dir):
+            return {}
+        os.makedirs(job_dir, exist_ok=True)
+        remote_dir = self.jetlag.get_work_dir() + "/job-" + self.jobid
+        call(["scp","-r",self.jetlag.login()+":"+remote_dir+"/",job_dir])
+        return {}
 
 class SSHJetlag(JetlagBase):
     def __init__(self, auth, machine)->None:
@@ -70,7 +96,7 @@ class SSHJetlag(JetlagBase):
     def login(self)->str:
         return f"{self.machine.user}@{self.machine.name}.{self.machine.domain}"
 
-    def configure(self)->None:
+    def configure(self,force:bool=False)->None:
         r = call(["ssh",self.login(),"true"])
         assert r == 0, f"configure() failed for machine {self.login()}"
 
@@ -92,10 +118,24 @@ class SSHJetlag(JetlagBase):
         ...
    
     def hello_world_job(self, jtype:str='fork')->JobBase:
-        ...
+        """
+        Create and send a "Hello World" job to make
+        sure that the system is working.
+        """
+        input_tgz : tgz_type = {}
+
+        input_tgz["hello-world.sh"] = """
+#!/bin/bash
+hostname
+date
+echo This is stdout
+echo This is stderr >&2
+        """.strip()+"\n"
+
+        return self.run_job(job_name='hello-world', script_file="hello-world.sh", input_tgz=input_tgz, jtype=jtype, run_time="00:01:00")
     
     def create_job_id(self)->str:
-        return uuid.uuid4()
+        return str(uuid.uuid4())
 
     def get_work_dir(self)->str:
         if self.machine.work_dir is not None:
@@ -104,15 +144,23 @@ class SSHJetlag(JetlagBase):
         
     def run_job(self, job_name:str, script_file:str, input_tgz:tgz_type={}, jtype:str='fork',
             nodes:int=1, ppn:int=16, run_time:ostr=None, nx:int=0, ny:int=0, nz:int=0)->JobBase:
+        assert script_file in input_tgz, f"Script file '{script_file}' not in tarball'"
         job_id = self.create_job_id()
-        remote_dir = self.machine.get_work_dir() + "/job-" + job_id
+        remote_dir = self.get_work_dir() + "/job-" + job_id
         self.make_dir(remote_dir)
-        r = call(["scp",script_file,self.login()+":"+remote_dir])
-        assert r != 0
+        tmp_script_file = os.path.join("/","tmp",script_file)
+        with open(tmp_script_file, "w") as fd:
+            fd.write(input_tgz[script_file])
+        r = call(["scp",tmp_script_file,self.login()+":"+remote_dir])
+        assert r == 0, f"r={r}"
         if jtype == 'fork':
-            r = call(["ssh",self.login(),"/usr/bin/env","-C",remote_dir,"bash",script_file])
+            r = call(["ssh",self.login(),"cd",remote_dir,"&&","bash","./" + script_file,">job.out","2>job.err"])
         else:
             raise Exception()
+        return SSHJob(self, jobid=job_id, jobname=job_name)
    
     def get_job_history(self, job_id:str)->JType:
+        ...
+    
+    def file_upload(self, dir_name:str, file_name:str, file_contents:Optional[Union[str,bytes]]=None)->None:
         ...

@@ -380,12 +380,13 @@ class JobBase(metaclass=ABCMeta):
     def __init__(self, jetlag:'JetlagBase', jobid:str, jobname:str)->None:
         self.jetlag = jetlag
         self.jobid = jobid
-    @abstractmethod
-    def get_status(self)->Optional[str]:
-        ...
+
     def get_history(self)->JType:
         return self.jetlag.get_job_history(self.jobid)
 
+    @abstractmethod
+    def get_status(self)->Optional[str]:
+        ...
     @abstractmethod
     def stop(self)->JType:
         ...
